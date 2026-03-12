@@ -12,11 +12,11 @@ jobs:
   prerelease:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go-cli/go.mod
 
@@ -27,7 +27,14 @@ jobs:
           # Sanitise branch name for use in a semver pre-release identifier
           SLUG=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
           SHORT_SHA="${GITHUB_SHA::7}"
-          VERSION="0.0.0-${SLUG}.${SHORT_SHA}"
+
+          # Derive base version from latest tag, bump patch
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          BASE=${LATEST_TAG#v}  # strip leading 'v'
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
+          PATCH=$((PATCH + 1))
+          VERSION="${MAJOR}.${MINOR}.${PATCH}-${SLUG}.${SHORT_SHA}"
+
           TAG="pre-${SLUG}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG"         >> "$GITHUB_OUTPUT"

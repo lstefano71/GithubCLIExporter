@@ -7,8 +7,9 @@ build/
 *.egg
 
 # Exports (generated output)
-export.md
-export.html
+exports/
+
+myenv/
 
 # IDE
 .vscode/

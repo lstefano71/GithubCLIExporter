@@ -1,0 +1,419 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"html"
+	"strings"
+	"time"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
+	gmhtml "github.com/yuin/goldmark/renderer/html"
+)
+
+var md = goldmark.New(
+	goldmark.WithExtensions(extension.Table, extension.Strikethrough),
+	goldmark.WithRendererOptions(gmhtml.WithHardWraps()),
+)
+
+func mdToHTML(text string) string {
+	var buf bytes.Buffer
+	md.Convert([]byte(text), &buf)
+	return buf.String()
+}
+
+func esc(s string) string {
+	return html.EscapeString(s)
+}
+
+func fmtTSShort(ts *time.Time) string {
+	if ts == nil {
+		return ""
+	}
+	return ts.Format("15:04")
+}
+
+func preview(text string, maxLen int) string {
+	if text == "" {
+		return ""
+	}
+	line := strings.TrimSpace(text)
+	line = strings.ReplaceAll(line, "\n", " ")
+	if len(line) > maxLen {
+		line = line[:maxLen]
+	}
+	return line
+}
+
+// RenderHTML renders a parsed session as a self-contained HTML document.
+func RenderHTML(session *ParsedSession) string {
+	var b strings.Builder
+
+	ws := session.Workspace
+	title := ws.Summary
+	if title == "" {
+		title = ws.ID
+	}
+	if title == "" {
+		title = "Session Export"
+	}
+	title = esc(title)
+
+	b.WriteString("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n")
+	b.WriteString("<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
+	fmt.Fprintf(&b, "<title>%s</title>\n", title)
+	fmt.Fprintf(&b, "<style>%s</style>\n", cssContent)
+	b.WriteString("</head>\n<body>\n")
+	b.WriteString("<button id=\"theme-toggle\" class=\"theme-toggle\">🌙</button>\n")
+	b.WriteString("<div id=\"scroll-track\" class=\"scroll-track\"></div>\n")
+	b.WriteString("<div id=\"track-detail\" class=\"track-detail\"></div>\n")
+	b.WriteString("<div class=\"container\">\n")
+
+	htmlHeader(&b, session)
+	htmlTOC(&b, session)
+	htmlPlan(&b, session)
+	htmlTodos(&b, session)
+	htmlConversation(&b, session)
+	htmlCheckpoints(&b, session)
+	htmlStatistics(&b, session)
+	htmlErrors(&b, session)
+
+	b.WriteString("</div>\n")
+	fmt.Fprintf(&b, "<script>%s</script>\n", jsContent)
+	b.WriteString("</body>\n</html>")
+
+	return b.String()
+}
+
+// ---------------------------------------------------------------------------
+// Sections
+// ---------------------------------------------------------------------------
+
+func htmlHeader(b *strings.Builder, s *ParsedSession) {
+	ws := s.Workspace
+	title := ws.Summary
+	if title == "" {
+		title = ws.ID
+	}
+	if title == "" {
+		title = "Untitled Session"
+	}
+	fmt.Fprintf(b, "<h1 id=\"top\">%s</h1>\n", esc(title))
+	b.WriteString("<h2 id=\"metadata\">Metadata</h2>\n<ul class=\"meta-list\">\n")
+
+	if ws.Repository != "" {
+		fmt.Fprintf(b, "<li><strong>Repository:</strong> %s</li>\n", esc(ws.Repository))
+	}
+	fmt.Fprintf(b, "<li><strong>Working Directory:</strong> %s</li>\n", esc(ws.Cwd))
+	if ws.GitRoot != "" && ws.GitRoot != ws.Cwd {
+		fmt.Fprintf(b, "<li><strong>Git Root:</strong> %s</li>\n", esc(ws.GitRoot))
+	}
+	if s.CopilotVersion != "" {
+		fmt.Fprintf(b, "<li><strong>Copilot Version:</strong> %s</li>\n", esc(s.CopilotVersion))
+	}
+	if ws.CreatedAt != nil {
+		fmt.Fprintf(b, "<li><strong>Started:</strong> %s</li>\n", ws.CreatedAt.Format("2006-01-02 15:04:05 UTC"))
+	}
+	if ws.UpdatedAt != nil {
+		fmt.Fprintf(b, "<li><strong>Last Updated:</strong> %s</li>\n", ws.UpdatedAt.Format("2006-01-02 15:04:05 UTC"))
+	}
+	if ws.ID != "" {
+		fmt.Fprintf(b, "<li><strong>Session ID:</strong> <code>%s</code></li>\n", esc(ws.ID))
+	}
+	b.WriteString("</ul>\n")
+}
+
+func htmlTOC(b *strings.Builder, s *ParsedSession) {
+	b.WriteString("<div class=\"toc\">\n<strong>Table of Contents</strong>\n<ul>\n")
+	b.WriteString("<li><a href=\"#metadata\">Metadata</a></li>\n")
+	if s.Plan != "" {
+		b.WriteString("<li><a href=\"#plan\">Session Plan</a></li>\n")
+	}
+	if len(s.Todos) > 0 {
+		b.WriteString("<li><a href=\"#todos\">Todos</a></li>\n")
+	}
+	if len(s.Turns) > 0 {
+		b.WriteString("<li><a href=\"#conversation\">Conversation</a></li>\n")
+	}
+	if len(s.Checkpoints) > 0 {
+		b.WriteString("<li><a href=\"#checkpoints\">Checkpoints</a></li>\n")
+	}
+	if len(s.ShutdownStats) > 0 {
+		b.WriteString("<li><a href=\"#statistics\">Session Statistics</a></li>\n")
+	}
+	if len(s.Errors) > 0 {
+		b.WriteString("<li><a href=\"#errors\">Session Errors</a></li>\n")
+	}
+	b.WriteString("</ul>\n</div>\n")
+}
+
+func htmlPlan(b *strings.Builder, s *ParsedSession) {
+	if s.Plan == "" {
+		return
+	}
+	b.WriteString("<h2 id=\"plan\">Session Plan</h2>\n")
+	fmt.Fprintf(b, "<div class=\"turn-content\">%s</div>\n", mdToHTML(strings.TrimSpace(s.Plan)))
+}
+
+func htmlTodos(b *strings.Builder, s *ParsedSession) {
+	if len(s.Todos) == 0 {
+		return
+	}
+	b.WriteString("<h2 id=\"todos\">Todos</h2>\n")
+	b.WriteString("<table>\n<thead><tr><th>Status</th><th>Title</th><th>Description</th></tr></thead>\n<tbody>\n")
+	icons := map[string]string{"done": "✅", "in_progress": "🔄", "pending": "⏳", "blocked": "🚫"}
+	for _, t := range s.Todos {
+		icon := icons[t.Status]
+		if icon == "" {
+			icon = "❓"
+		}
+		desc := strings.ReplaceAll(t.Description, "\n", " ")
+		if len(desc) > 150 {
+			desc = desc[:147] + "..."
+		}
+		fmt.Fprintf(b, "<tr><td>%s %s</td><td>%s</td><td>%s</td></tr>\n", icon, esc(t.Status), esc(t.Title), esc(desc))
+	}
+	b.WriteString("</tbody>\n</table>\n")
+}
+
+func htmlConversation(b *strings.Builder, s *ParsedSession) {
+	if len(s.Turns) == 0 {
+		return
+	}
+	b.WriteString("<h2 id=\"conversation\">Conversation</h2>\n")
+	for i, turn := range s.Turns {
+		if turn.Role == "user" {
+			htmlUserTurn(b, turn, i)
+		} else {
+			htmlAssistantTurn(b, turn, i)
+		}
+	}
+}
+
+func htmlUserTurn(b *strings.Builder, t ConversationTurn, idx int) {
+	ts := fmtTS(t.Timestamp)
+	tsShort := fmtTSShort(t.Timestamp)
+	prev := esc(preview(t.Content, 80))
+	fmt.Fprintf(b, "<div class=\"turn turn-user\" id=\"turn-%d\" data-ts=\"%s\" data-role=\"user\" data-preview=\"%s\">\n",
+		idx, tsShort, prev)
+	fmt.Fprintf(b, "<div class=\"turn-header\">👤 User %s</div>\n", ts)
+	fmt.Fprintf(b, "<div class=\"turn-content\">%s</div>\n", mdToHTML(strings.TrimSpace(t.Content)))
+	b.WriteString("</div>\n")
+}
+
+func htmlAssistantTurn(b *strings.Builder, t ConversationTurn, idx int) {
+	ts := fmtTS(t.Timestamp)
+	tsShort := fmtTSShort(t.Timestamp)
+	prev := esc(preview(t.Content, 80))
+	toolCount := len(t.ToolCalls)
+	extra := ""
+	if toolCount > 0 {
+		extra = fmt.Sprintf(" + %d tools", toolCount)
+	}
+	fmt.Fprintf(b, "<div class=\"turn turn-assistant\" id=\"turn-%d\" data-ts=\"%s\" data-role=\"assistant\" data-preview=\"%s%s\">\n",
+		idx, tsShort, prev, esc(extra))
+	fmt.Fprintf(b, "<div class=\"turn-header\">🤖 Assistant %s</div>\n", ts)
+
+	if t.Thinking != "" {
+		b.WriteString("<details>\n<summary><span class=\"thinking-label\">💭 Thinking</span></summary>\n")
+		fmt.Fprintf(b, "<div class=\"detail-content\"><pre>%s</pre></div>\n", esc(strings.TrimSpace(t.Thinking)))
+		b.WriteString("</details>\n")
+	}
+
+	if t.Content != "" {
+		fmt.Fprintf(b, "<div class=\"turn-content\">%s</div>\n", mdToHTML(strings.TrimSpace(t.Content)))
+	}
+
+	for _, tc := range t.ToolCalls {
+		htmlToolCall(b, tc)
+	}
+	for _, sa := range t.SubAgents {
+		htmlSubAgent(b, sa)
+	}
+
+	b.WriteString("</div>\n")
+}
+
+func htmlToolCall(b *strings.Builder, tc ToolCall) {
+	name := esc(tc.Request.Name)
+	desc := ""
+	if tc.Description != "" {
+		desc = esc(tc.Description)
+	}
+	label := fmt.Sprintf("<span class=\"tool-label\">🔧 %s</span>", name)
+	if desc != "" {
+		label += " — " + desc
+	}
+
+	fmt.Fprintf(b, "<details>\n<summary>%s</summary>\n<div class=\"detail-content\">\n", label)
+
+	if len(tc.Request.Arguments) > 0 {
+		htmlToolArguments(b, tc.Request.Name, tc.Request.Arguments)
+	}
+
+	if tc.Result != nil {
+		statusClass := "success"
+		statusText := "success"
+		if !tc.Result.Success {
+			statusClass = "error"
+			statusText = "failed"
+		}
+		fmt.Fprintf(b, "<p><strong>Result</strong> (<span class=\"%s\">%s</span>):</p>\n", statusClass, statusText)
+		output := tc.Result.DetailedContent
+		if output == "" {
+			output = tc.Result.Content
+		}
+		if output != "" {
+			fmt.Fprintf(b, "<pre><code>%s</code></pre>\n", esc(strings.TrimSpace(output)))
+		}
+	}
+
+	b.WriteString("</div>\n</details>\n")
+}
+
+func htmlToolArguments(b *strings.Builder, toolName string, args map[string]interface{}) {
+	switch toolName {
+	case "powershell":
+		if cmd := sval(args, "command"); cmd != "" {
+			fmt.Fprintf(b, "<p><strong>Command:</strong> <code>%s</code></p>\n", esc(cmd))
+		}
+	case "view", "create", "edit":
+		if p := sval(args, "path"); p != "" {
+			fmt.Fprintf(b, "<p><strong>Path:</strong> <code>%s</code></p>\n", esc(p))
+		}
+		if toolName == "edit" {
+			if old := sval(args, "old_str"); old != "" {
+				fmt.Fprintf(b, "<p><strong>Old:</strong></p><pre><code>%s</code></pre>\n", esc(old))
+			}
+			if nw := sval(args, "new_str"); nw != "" {
+				fmt.Fprintf(b, "<p><strong>New:</strong></p><pre><code>%s</code></pre>\n", esc(nw))
+			}
+		} else if toolName == "create" {
+			if ft := sval(args, "file_text"); ft != "" {
+				display := ft
+				if len(ft) > 2000 {
+					display = ft[:2000] + fmt.Sprintf("\n... (%d chars total)", len(ft))
+				}
+				fmt.Fprintf(b, "<p><strong>Content:</strong></p><pre><code>%s</code></pre>\n", esc(display))
+			}
+		}
+	case "grep", "glob":
+		if pat := sval(args, "pattern"); pat != "" {
+			fmt.Fprintf(b, "<p><strong>Pattern:</strong> <code>%s</code></p>\n", esc(pat))
+		}
+	case "sql":
+		if q := sval(args, "query"); q != "" {
+			fmt.Fprintf(b, "<p><strong>Query:</strong></p><pre><code>%s</code></pre>\n", esc(q))
+		}
+	case "web_fetch":
+		if u := sval(args, "url"); u != "" {
+			fmt.Fprintf(b, "<p><strong>URL:</strong> <a href=\"%s\">%s</a></p>\n", esc(u), esc(u))
+		}
+	case "task":
+		if at := sval(args, "agent_type"); at != "" {
+			fmt.Fprintf(b, "<p><strong>Agent:</strong> %s</p>\n", esc(at))
+		}
+		if p := sval(args, "prompt"); p != "" {
+			display := p
+			if len(p) > 500 {
+				display = p[:500] + fmt.Sprintf("... (%d chars)", len(p))
+			}
+			fmt.Fprintf(b, "<p><strong>Prompt:</strong> %s</p>\n", esc(display))
+		}
+	default:
+		data, _ := json.MarshalIndent(args, "", "  ")
+		s := string(data)
+		if len(s) > 1000 {
+			s = s[:1000] + "\n... (truncated)"
+		}
+		fmt.Fprintf(b, "<p><strong>Arguments:</strong></p><pre><code>%s</code></pre>\n", esc(s))
+	}
+}
+
+func htmlSubAgent(b *strings.Builder, sa SubAgentRun) {
+	status := "<span class=\"success\">✅</span>"
+	if !sa.Success {
+		status = "<span class=\"error\">❌</span>"
+	}
+	name := sa.DisplayName
+	if name == "" {
+		name = sa.AgentName
+	}
+	fmt.Fprintf(b, "<details>\n<summary><span class=\"subagent-label\">🔍 Sub-agent: %s</span> %s</summary>\n", esc(name), status)
+	b.WriteString("<div class=\"detail-content\">\n")
+	if sa.Description != "" {
+		fmt.Fprintf(b, "<p><em>%s</em></p>\n", esc(strings.TrimSpace(sa.Description)))
+	}
+	if sa.Error != "" {
+		fmt.Fprintf(b, "<p class=\"error\"><strong>Error:</strong> %s</p>\n", esc(sa.Error))
+	}
+	b.WriteString("</div>\n</details>\n")
+}
+
+func htmlCheckpoints(b *strings.Builder, s *ParsedSession) {
+	if len(s.Checkpoints) == 0 {
+		return
+	}
+	b.WriteString("<h2 id=\"checkpoints\">Checkpoints</h2>\n")
+	for _, cp := range s.Checkpoints {
+		fmt.Fprintf(b, "<h3>Checkpoint %d: %s</h3>\n", cp.Index, esc(cp.Title))
+		if cp.Content != "" {
+			b.WriteString("<details>\n<summary>View checkpoint content</summary>\n")
+			fmt.Fprintf(b, "<div class=\"detail-content turn-content\">%s</div>\n", mdToHTML(strings.TrimSpace(cp.Content)))
+			b.WriteString("</details>\n")
+		}
+	}
+}
+
+func htmlStatistics(b *strings.Builder, s *ParsedSession) {
+	stats := s.ShutdownStats
+	if len(stats) == 0 {
+		return
+	}
+	b.WriteString("<h2 id=\"statistics\">Session Statistics</h2>\n")
+	b.WriteString("<div class=\"stat-grid\">\n")
+
+	if v, ok := stats["totalPremiumRequests"]; ok {
+		fmt.Fprintf(b, "<div class=\"stat-card\"><div class=\"stat-value\">%v</div><div class=\"stat-label\">Premium Requests</div></div>\n", v)
+	}
+
+	if v, ok := stats["totalApiDurationMs"]; ok {
+		if ms, ok := toFloat64(v); ok {
+			minutes := ms / 1000 / 60
+			if minutes >= 1 {
+				fmt.Fprintf(b, "<div class=\"stat-card\"><div class=\"stat-value\">%.1fm</div><div class=\"stat-label\">API Duration</div></div>\n", minutes)
+			} else {
+				seconds := ms / 1000
+				fmt.Fprintf(b, "<div class=\"stat-card\"><div class=\"stat-value\">%.1fs</div><div class=\"stat-label\">API Duration</div></div>\n", seconds)
+			}
+		}
+	}
+
+	if changes, ok := stats["codeChanges"].(map[string]interface{}); ok {
+		added, _ := toFloat64(changes["linesAdded"])
+		removed, _ := toFloat64(changes["linesRemoved"])
+		files, _ := changes["filesModified"].([]interface{})
+		fmt.Fprintf(b, "<div class=\"stat-card\"><div class=\"stat-value\">+%.0f / -%.0f</div><div class=\"stat-label\">Lines Changed (%d files)</div></div>\n",
+			added, removed, len(files))
+	}
+
+	b.WriteString("</div>\n")
+}
+
+func htmlErrors(b *strings.Builder, s *ParsedSession) {
+	if len(s.Errors) == 0 {
+		return
+	}
+	b.WriteString("<h2 id=\"errors\">Session Errors</h2>\n<ul>\n")
+	for _, e := range s.Errors {
+		errType := "unknown"
+		if v, ok := e["errorType"].(string); ok {
+			errType = v
+		}
+		msg, _ := e["message"].(string)
+		fmt.Fprintf(b, "<li>⚠️ <strong>%s</strong>: %s</li>\n", esc(errType), esc(msg))
+	}
+	b.WriteString("</ul>\n")
+}

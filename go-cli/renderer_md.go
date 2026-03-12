@@ -10,6 +10,7 @@ import (
 // RenderMarkdown renders a parsed session as a Markdown document.
 func RenderMarkdown(session *ParsedSession) string {
 	var b strings.Builder
+	renderMDFrontMatter(&b, session)
 	renderMDHeader(&b, session)
 	renderMDPlan(&b, session)
 	renderMDTodos(&b, session)
@@ -18,6 +19,34 @@ func RenderMarkdown(session *ParsedSession) string {
 	renderMDStatistics(&b, session)
 	renderMDErrors(&b, session)
 	return b.String()
+}
+
+func renderMDFrontMatter(b *strings.Builder, s *ParsedSession) {
+	b.WriteString("---\n")
+	b.WriteString("generator: copilot-export\n")
+	fmt.Fprintf(b, "generator_version: %s\n", version)
+
+	ws := s.Workspace
+	title := ws.Summary
+	if title == "" {
+		title = ws.ID
+	}
+	if title != "" {
+		fmt.Fprintf(b, "title: %q\n", title)
+	}
+	if ws.CreatedAt != nil {
+		fmt.Fprintf(b, "date: %q\n", ws.CreatedAt.Format(time.RFC3339))
+	}
+	if ws.Repository != "" {
+		fmt.Fprintf(b, "repository: %q\n", ws.Repository)
+	}
+	if s.CopilotVersion != "" {
+		fmt.Fprintf(b, "copilot_version: %q\n", s.CopilotVersion)
+	}
+	if ws.ID != "" {
+		fmt.Fprintf(b, "session_id: %q\n", ws.ID)
+	}
+	b.WriteString("---\n\n")
 }
 
 func renderMDHeader(b *strings.Builder, s *ParsedSession) {

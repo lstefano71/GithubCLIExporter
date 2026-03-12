@@ -127,6 +127,10 @@ html.has-minimap::-webkit-scrollbar { display: none; }
 .track-detail-ts { opacity: 0.6; flex-shrink: 0; }
 .track-detail-text { overflow: hidden; text-overflow: ellipsis; }
 .theme-toggle { right: 28px; }
+.export-footer {
+  text-align: center; font-size: 0.8rem; opacity: 0.5; padding: 2rem 1rem 1rem;
+  border-top: 1px solid var(--border); margin-top: 2rem;
+}
 @media (max-width: 768px) {
   .scroll-track, .track-detail { display: none !important; }
   html.has-minimap { scrollbar-width: auto; }

@@ -153,6 +153,13 @@ func TestRenderMarkdown_FullSession(t *testing.T) {
 	out := RenderMarkdown(buildFullSession())
 
 	required := []string{
+		"---\n",
+		"generator: copilot-export",
+		"generator_version:",
+		"title: \"Full Test Session\"",
+		"repository: \"owner/repo\"",
+		"copilot_version: \"1.2.3\"",
+		"session_id: \"sess-001\"",
 		"# Session: Full Test Session",
 		"## Metadata",
 		"**Repository**: owner/repo",
@@ -199,6 +206,12 @@ func TestRenderMarkdown_EmptySession(t *testing.T) {
 	}
 	out := RenderMarkdown(s)
 
+	if !strings.Contains(out, "---\n") {
+		t.Error("missing front matter delimiters")
+	}
+	if !strings.Contains(out, "generator: copilot-export") {
+		t.Error("missing generator field in front matter")
+	}
 	if !strings.Contains(out, "# Session: Empty") {
 		t.Error("missing title")
 	}

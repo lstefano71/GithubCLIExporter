@@ -1,0 +1,72 @@
+"""Parse sub-array stream in namespace serialization."""
+import struct, sys
+
+def parse_dump_file(fn):
+    dumps = {}
+    cur, cb = None, []
+    with open(fn, 'r', encoding='utf-8') as f:
+        for line in f:
+            l = line.strip()
+            if l.startswith('DUMP '):
+                cur = l.split()[1]; cb = []
+            elif l == 'ENDDUMP':
+                if cur: dumps[cur] = bytes(cb)
+                cur = None
+            elif cur is not None and l:
+                try: cb.extend(int(x) for x in l.split())
+                except ValueError: pass
+    return dumps
+
+dumps = parse_dump_file('ns_probe_output.txt')
+
+for name in ['NS_ABC', 'NS_5MIXED']:
+    P = dumps[name][10:]
+    print(f'\n=== {name} sub-arrays from P+0x00B0 ===')
+    pos = 0x00B0
+    for idx in range(25):
+        if pos + 8 > len(P): break
+        sw = struct.unpack_from('<Q', P, pos)[0]
+        if sw == 0:
+            print(f'  [{idx:2d}] P+{pos:04x}: TERM')
+            pos += 8
+            continue
+        nw = sw - 1
+        if pos + 8 + nw * 8 > len(P):
+            print(f'  [{idx:2d}] P+{pos:04x}: sw={sw} (truncated)')
+            break
+        data = P[pos+8:pos+8+nw*8]
+        b0 = data[0] if len(data) > 0 else 0
+        b1 = data[1] if len(data) > 1 else 0
+        desc = ''
+        if len(data) >= 4 and data[0]==1 and data[1]==0x28 and data[2]==0 and data[3]==0x88:
+            ch = []
+            for j in range(8, len(data), 2):
+                if j+1 < len(data) and data[j] > 0 and data[j+1] == 0:
+                    ch.append(chr(data[j]))
+                else: break
+            desc = 'NAME "' + ''.join(ch) + '"'
+        elif b0 == 0x0F and b1 == 0x22:
+            v = data[8] if len(data) > 8 else 0
+            desc = f'Int8_scalar={v}'
+        elif b0 == 0x0F and b1 == 0x25:
+            v = struct.unpack_from('<d', data, 8)[0] if len(data) > 15 else 0
+            desc = f'Float64={v}'
+        elif b0 == 0x1F and b1 == 0x27:
+            c = struct.unpack_from('<Q', data, 8)[0] if len(data) > 15 else 0
+            t = data[16:16+min(c,50)].decode('ascii','replace') if len(data) > 16 else ''
+            desc = f'Char8[{c}]="{t}"'
+        elif b0 == 0x1F and b1 == 0x22:
+            c = struct.unpack_from('<Q', data, 8)[0] if len(data) > 15 else 0
+            vals = list(data[16:16+min(c,20)])
+            desc = f'Int8[{c}]={vals}'
+        elif b0 == 0x1F and b1 == 0x21:
+            c = struct.unpack_from('<Q', data, 8)[0] if len(data) > 15 else 0
+            desc = f'Bool[{c}]'
+        elif b0 == 0x17 and b1 == 0x06:
+            c = struct.unpack_from('<Q', data, 8)[0] if len(data) > 15 else 0
+            desc = f'Nested[{c}]'
+        else:
+            desc = f'tc=0x{b1:02x}{b0:02x}'
+        print(f'  [{idx:2d}] P+{pos:04x}: sw={sw} {desc}')
+        pos += nw * 8
+    print(f'  ... at P+{pos:04x}')

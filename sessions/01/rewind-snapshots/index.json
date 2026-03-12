@@ -1,0 +1,207 @@
+{
+  "version": 1,
+  "snapshots": [
+    {
+      "snapshotId": "868360ee-94f8-4952-9862-c3e1396d3b0d",
+      "eventId": "aa601c30-31e6-4c40-9998-b1c8f89c0536",
+      "userMessage": "will you spend some time now trying to figure out the actual format of the arrays in a component? remember you can probably use the serialize i-beam to help you out with the experiments. also, please notice that there are more types than you thought there were: https://docs.dyalog.com/20.0/language-reference-guide/system-functions/data-representation-monadic/ Also, figuring out the serialised format of a namespace could be tricky but it would be interesting if you at least gave it a try.",
+      "timestamp": "2026-03-11T18:48:41.568Z",
+      "fileCount": 0,
+      "gitCommit": "01db53939159215c702877c316de56b647f36622",
+      "gitBranch": null,
+      "backupHashes": [],
+      "files": {}
+    },
+    {
+      "snapshotId": "7306b5f2-55a8-4f14-a8cc-aaefcdf88ad8",
+      "eventId": "5ed0de9c-0ea6-42a2-b87e-31259e511347",
+      "userMessage": "for the record: the serialise i-beam is documented at https://docs.dyalog.com/20.0/language-reference-guide/primitive-operators/i-beam/serialise-deserialise-array/",
+      "timestamp": "2026-03-11T18:51:17.452Z",
+      "fileCount": 0,
+      "gitCommit": "01db53939159215c702877c316de56b647f36622",
+      "gitBranch": null,
+      "backupHashes": [],
+      "files": {}
+    },
+    {
+      "snapshotId": "1a196753-427a-45a9-8142-833243c8d596",
+      "eventId": "340944e5-19cf-4253-90df-e6e6639de2cc",
+      "userMessage": "no, you run the scripts and work on the reverse engineering... there's a copy of the interpreter here: D:\\devel\\dyalog\\20.0\\ and you have figured out before how to execute apl scripts. you can do it again. and maybe write a note for the future",
+      "timestamp": "2026-03-11T19:00:45.772Z",
+      "fileCount": 5,
+      "gitCommit": "01db53939159215c702877c316de56b647f36622",
+      "gitBranch": null,
+      "backupHashes": [
+        "d688d20da0932b8b-1773255645741",
+        "518298cec6211324-1773255645765",
+        "68ed589f79665433-1773255645767",
+        "322db3b02fa94438-1773255645769",
+        "b55afeb53151ef47-1773255645771"
+      ],
+      "files": {
+        "3ecd9a5d0e183bc1d5b2079ec1a0090f": {
+          "gitStatus": "??",
+          "contentHash": "git-sha1:d688d20da0932b8b9d24818c948b700e2f249835",
+          "backupFile": "d688d20da0932b8b-1773255645741",
+          "size": 15338,
+          "mtime": "2026-03-11T18:58:47.139Z",
+          "mode": 33206
+        },
+        "f8da078c7836554e8cb35cd471450d40": {
+          "gitStatus": "??",
+          "contentHash": "git-sha1:518298cec62113249767bc9b05a7faa659773cb7",
+          "backupFile": "518298cec6211324-1773255645765",
+          "size": 6085,
+          "mtime": "2026-03-11T18:57:27.073Z",
+          "mode": 33206
+        },
+        "3646e0167c3fa3c50fc665081a111a33": {
+          "gitStatus": "??",
+          "contentHash": "git-sha1:68ed589f79665433371e6aba9e0f303a4942963e",
+          "backupFile": "68ed589f79665433-1773255645767",
+          "size": 3382,
+          "mtime": "2026-03-11T18:57:27.089Z",
+          "mode": 33206
+        },
+        "1353b791578717134336c283258c4b6d": {
+          "gitStatus": "??",
+          "contentHash": "git-sha1:322db3b02fa9443806ceabc63533a63e4599561e",
+          "backupFile": "322db3b02fa94438-1773255645769",
+          "size": 4967,
+          "mtime": "2026-03-11T18:56:40.657Z",
+          "mode": 33206
+        },
+        "a32e9b6eb0e2d691ee0a6bf780363c7a": {
+          "gitStatus": "??",
+          "contentHash": "git-sha1:b55afeb53151ef47fb31697c817634f722ef6974",
+          "backupFile": "b55afeb53151ef47-1773255645771",
+          "size": 10702,
+          "mtime": "2026-03-11T18:56:40.657Z",
+          "mode": 33206
+        }
+      }
+    },
+    {
+      "snapshotId": "f17db56a-4ef5-4f81-a91a-f0f23f34b522",
+      "eventId": "4052a314-3bc5-4d51-bc2a-491b4d11beb2",
+      "userMessage": "if you put your mind to it I am sure you can tackle namespace serialisation. about type 1287, read here how to activate it: https://docs.dyalog.com/20.0/language-reference-guide/system-functions/fr/",
+      "timestamp": "2026-03-11T19:14:35.890Z",
+      "fileCount": 0,
+      "gitCommit": "6ec90144dd735bea48e36f6ab3e11bb250fd1a1b",
+      "gitBranch": null,
+      "backupHashes": [],
+      "files": {}
+    },
+    {
+      "snapshotId": "5880e102-1aeb-4837-9998-877b72135656",
+      "eventId": "6bc53655-0721-4489-8d50-b411da589af0",
+      "userMessage": "continue now",
+      "timestamp": "2026-03-11T19:53:10.940Z",
+      "fileCount": 8,
+      "gitCommit": "6ec90144dd735bea48e36f6ab3e11bb250fd1a1b",
+      "gitBranch": null,
+      "backupHashes": [
+        "c8271d7a969dbe94-1773258790925",
+        "5aadda8c8c1320c6-1773258790927",
+        "07d2e6211d83561f-1773258790929",
+        "65fff4bb61aa3800-1773258790931",
+        "5387d3cf5ddf8aac-1773258790932",
+        "62932a4c7945bdb7-1773258790934",
+        "18cb6ad566702fd2-1773258790937",
+        "008838d8b9496131-1773258790939"
+      ],
+      "files": {
+        "55e87ca5aa9291322e353441eb49128b": {
+          "gitStatus": "??",
+          "contentHash": "git-sha1:c8271d7a969dbe9457fc513b7f36a4e9e6e54311",
+          "backupFile": "c8271d7a969dbe94-1773258790925",
+          "size": 10253,
+          "mtime": "2026-03-11T19:30:07.475Z",
+          "mode": 33206
+        },
+        "361fbe8366ed622b790619a46dde36bf": {
+          "gitStatus": "??",
+          "contentHash": "git-sha1:5aadda8c8c1320c687fc43ca99e88eea5accef96",
+          "backupFile": "5aadda8c8c1320c6-1773258790927",
+          "size": 12436,
+          "mtime": "2026-03-11T19:33:56.264Z",
+          "mode": 33206
+        },
+        "48a2e16a18569475d65f92a202641784": {
+          "gitStatus": "??",
+          "contentHash": "git-sha1:07d2e6211d83561f26865996c2e8d39b04b8e95c",
+          "backupFile": "07d2e6211d83561f-1773258790929",
+          "size": 302670,
+          "mtime": "2026-03-11T19:30:17.467Z",
+          "mode": 33206
+        },
+        "e56386ae7e7f45a3b68d41075d2bfc65": {
+          "gitStatus": "??",
+          "contentHash": "git-sha1:65fff4bb61aa3800e59705d8db1474bd200efeec",
+          "backupFile": "65fff4bb61aa3800-1773258790931",
+          "size": 20940,
+          "mtime": "2026-03-11T19:34:03.538Z",
+          "mode": 33206
+        },
+        "60c43f4205addfce9b21cb54e01c6472": {
+          "gitStatus": "??",
+          "contentHash": "git-sha1:5387d3cf5ddf8aac47848d7f1bf049c47676c6a8",
+          "backupFile": "5387d3cf5ddf8aac-1773258790932",
+          "size": 68159,
+          "mtime": "2026-03-11T19:28:58.827Z",
+          "mode": 33206
+        },
+        "550b5e18ca282e5c94ace74e4400b3a7": {
+          "gitStatus": "??",
+          "contentHash": "git-sha1:62932a4c7945bdb7de9bd41fe91d1b25a4769014",
+          "backupFile": "62932a4c7945bdb7-1773258790934",
+          "size": 2905,
+          "mtime": "2026-03-11T19:46:01.748Z",
+          "mode": 33206
+        },
+        "654f1e22c6aef9b7ad119d134f217939": {
+          "gitStatus": "??",
+          "contentHash": "git-sha1:18cb6ad566702fd2887400ff35bc097a57d39dca",
+          "backupFile": "18cb6ad566702fd2-1773258790937",
+          "size": 3200,
+          "mtime": "2026-03-11T19:22:41.210Z",
+          "mode": 33206
+        },
+        "dc40ecc12db52ea558928ff334634054": {
+          "gitStatus": "??",
+          "contentHash": "git-sha1:008838d8b94961317a8939232fff183e5409a60d",
+          "backupFile": "008838d8b9496131-1773258790939",
+          "size": 4962,
+          "mtime": "2026-03-11T19:28:49.140Z",
+          "mode": 33206
+        }
+      }
+    },
+    {
+      "snapshotId": "0380899d-420e-43b4-a22e-4a0094ec49ec",
+      "eventId": "fcbeeeaf-f39a-4356-b6a3-9f064f6051f6",
+      "userMessage": ".exit",
+      "timestamp": "2026-03-12T03:24:09.657Z",
+      "fileCount": 0,
+      "gitCommit": "84e58e62df085aae21f54d952f870b547e95d6c6",
+      "gitBranch": null,
+      "backupHashes": [],
+      "files": {}
+    }
+  ],
+  "filePathMap": {
+    "3ecd9a5d0e183bc1d5b2079ec1a0090f": "D:\\_Utenti\\stf.APLITA\\Source\\Repos\\DCFFiles\\analyze_serialization.py",
+    "f8da078c7836554e8cb35cd471450d40": "D:\\_Utenti\\stf.APLITA\\Source\\Repos\\DCFFiles\\create_test_types.apls",
+    "3646e0167c3fa3c50fc665081a111a33": "D:\\_Utenti\\stf.APLITA\\Source\\Repos\\DCFFiles\\probe_serialize_nested.apls",
+    "1353b791578717134336c283258c4b6d": "D:\\_Utenti\\stf.APLITA\\Source\\Repos\\DCFFiles\\probe_serialize_ns.apls",
+    "a32e9b6eb0e2d691ee0a6bf780363c7a": "D:\\_Utenti\\stf.APLITA\\Source\\Repos\\DCFFiles\\probe_serialize_types.apls",
+    "55e87ca5aa9291322e353441eb49128b": "D:\\_Utenti\\stf.APLITA\\Source\\Repos\\DCFFiles\\analyze_ns.py",
+    "361fbe8366ed622b790619a46dde36bf": "D:\\_Utenti\\stf.APLITA\\Source\\Repos\\DCFFiles\\analyze_ns_deep.py",
+    "48a2e16a18569475d65f92a202641784": "D:\\_Utenti\\stf.APLITA\\Source\\Repos\\DCFFiles\\ns_analysis_output.txt",
+    "e56386ae7e7f45a3b68d41075d2bfc65": "D:\\_Utenti\\stf.APLITA\\Source\\Repos\\DCFFiles\\ns_deep_output.txt",
+    "60c43f4205addfce9b21cb54e01c6472": "D:\\_Utenti\\stf.APLITA\\Source\\Repos\\DCFFiles\\ns_probe_output.txt",
+    "550b5e18ca282e5c94ace74e4400b3a7": "D:\\_Utenti\\stf.APLITA\\Source\\Repos\\DCFFiles\\parse_ns_stream.py",
+    "654f1e22c6aef9b7ad119d134f217939": "D:\\_Utenti\\stf.APLITA\\Source\\Repos\\DCFFiles\\probe_decimal128.apls",
+    "dc40ecc12db52ea558928ff334634054": "D:\\_Utenti\\stf.APLITA\\Source\\Repos\\DCFFiles\\probe_ns_deep.apls"
+  }
+}

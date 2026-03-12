@@ -1,0 +1,370 @@
+﻿⎕IO←0
+
+⍝ === Comprehensive 220⌶ Serialization Probe ===
+⍝ Serialize every ⎕DR type at multiple ranks, dump raw unsigned bytes
+
+⍝ Helper: convert signed bytes to unsigned and format
+fmt←{⍕256|⍵}
+
+⎕←'=== PHASE 1: ⎕DR verification for all types ==='
+⎕←''
+
+⍝ --- Booleans (⎕DR 11) ---
+⎕←'Bool scalar 0:    ⎕DR=',⍕⎕DR 0
+⎕←'Bool scalar 1:    ⎕DR=',⍕⎕DR 1
+⎕←'Bool vec 1 0 1:   ⎕DR=',⍕⎕DR 1 0 1
+⎕←'Bool vec 8:       ⎕DR=',⍕⎕DR 1 0 1 0 1 1 0 0
+
+⍝ --- Int8 (⎕DR 83) ---
+⎕←'Int8 scalar 42:   ⎕DR=',⍕⎕DR 42
+⎕←'Int8 scalar 127:  ⎕DR=',⍕⎕DR 127
+⎕←'Int8 vec:         ⎕DR=',⍕⎕DR 10 20 30
+
+⍝ --- Int16 (⎕DR 163) ---
+⎕←'Int16 scalar 300: ⎕DR=',⍕⎕DR 300
+⎕←'Int16 scalar ¯200:⎕DR=',⍕⎕DR ¯200
+⎕←'Int16 vec:        ⎕DR=',⍕⎕DR 300 400 500
+
+⍝ --- Int32 (⎕DR 323) ---
+⎕←'Int32 scalar 1e5: ⎕DR=',⍕⎕DR 100000
+⎕←'Int32 scalar ¯1e5:⎕DR=',⍕⎕DR ¯100000
+⎕←'Int32 vec:        ⎕DR=',⍕⎕DR 100000 200000
+
+⍝ --- Float64 (⎕DR 645) ---
+⎕←'Float scalar 3.14:⎕DR=',⍕⎕DR 3.14
+⎕←'Float vec:        ⎕DR=',⍕⎕DR 1.5 2.5 3.5
+
+⍝ --- Char8 (⎕DR 80) ---
+⎕←'Char8 scalar A:   ⎕DR=',⍕⎕DR 'A'
+⎕←'Char8 vec hello:  ⎕DR=',⍕⎕DR 'hello'
+
+⍝ --- Char16 (⎕DR 160) ---
+⎕←'Char16 vec ⍴⍳∊:   ⎕DR=',⍕⎕DR '⍴⍳∊'
+
+⍝ --- Char32 (⎕DR 320) --- try high Unicode
+⎕←'Char32 U+1F600:  ⎕DR=',⍕⎕DR ⎕UCS 128512
+⎕←'Char32 vec:       ⎕DR=',⍕⎕DR ⎕UCS 128512 128513
+
+⍝ --- Pointer/Nested (⎕DR 326) ---
+⎕←'Nested:           ⎕DR=',⍕⎕DR ('hello' 42)
+⎕←'Deep nested:      ⎕DR=',⍕⎕DR (1 (2 (3 4)))
+
+⍝ --- Complex128 (⎕DR 1289) ---
+⎕←'Complex scalar:   ⎕DR=',⍕⎕DR 1J2
+⎕←'Complex vec:      ⎕DR=',⍕⎕DR 1J2 3J4
+
+⍝ --- Decimal128 (⎕DR 1287) --- requires ⎕FR←1287
+⍝ Save current ⎕FR and try
+savefr←⎕FR
+:Trap 0
+  ⎕FR←1287
+  ⎕←'Decimal scalar:   ⎕DR=',⍕⎕DR 1.5
+  ⎕←'Decimal vec:      ⎕DR=',⍕⎕DR 1.5 2.5
+  ⎕FR←savefr
+:Else
+  ⎕←'Decimal128: ⎕FR←1287 not supported'
+  ⎕FR←savefr
+:EndTrap
+
+⍝ --- Empty vectors ---
+⎕←'Empty num ⍬:      ⎕DR=',⍕⎕DR ⍬
+⎕←'Empty char:       ⎕DR=',⍕⎕DR ''
+
+⎕←''
+⎕←'=== PHASE 2: 220⌶ serialization of every type ==='
+⎕←''
+
+⍝ For each type, serialize and print: length, first N unsigned bytes
+
+⍝ --- Boolean ---
+⎕←'--- Boolean (⎕DR 11) ---'
+s←1(220⌶)0
+⎕←'Bool scalar 0:     len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)1
+⎕←'Bool scalar 1:     len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)1 0 1
+⎕←'Bool vec 1 0 1:    len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)1 0 1 0 1 1 0 0
+⎕←'Bool vec 8bit:     len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)2 4⍴1 0 1 0 0 1 0 1
+⎕←'Bool mat 2x4:      len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)2 3 2⍴1 0 1 0 0 1 0 1 1 1 0 0
+⎕←'Bool rank3 2x3x2:  len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Int8 (⎕DR 83) ---
+⎕←'--- Int8 (⎕DR 83) ---'
+s←1(220⌶)42
+⎕←'Int8 scalar 42:    len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)127
+⎕←'Int8 scalar 127:   len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)10 20 30
+⎕←'Int8 vec 10 20 30: len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)2 3⍴10 20 30 40 50 60
+⎕←'Int8 mat 2x3:      len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)2 3 2⍴⍳12
+⎕←'Int8 rank3 2x3x2:  len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Int16 (⎕DR 163) ---
+⎕←'--- Int16 (⎕DR 163) ---'
+s←1(220⌶)300
+⎕←'Int16 scalar 300:  len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)¯200
+⎕←'Int16 scalar ¯200: len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)300 400 500
+⎕←'Int16 vec:         len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)2 3⍴300 400 500 600 700 800
+⎕←'Int16 mat 2x3:     len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Int32 (⎕DR 323) ---
+⎕←'--- Int32 (⎕DR 323) ---'
+s←1(220⌶)100000
+⎕←'Int32 scalar 1e5:  len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)¯100000
+⎕←'Int32 scalar ¯1e5: len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)100000 200000 300000
+⎕←'Int32 vec:         len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)2 3⍴100000 200000 300000 400000 500000 600000
+⎕←'Int32 mat 2x3:     len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Float64 (⎕DR 645) ---
+⎕←'--- Float64 (⎕DR 645) ---'
+s←1(220⌶)3.14
+⎕←'Float scalar 3.14: len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)1.5 2.5 3.5
+⎕←'Float vec:         len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)2 3⍴1.1 2.2 3.3 4.4 5.5 6.6
+⎕←'Float mat 2x3:     len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Char8 (⎕DR 80) ---
+⎕←'--- Char8 (⎕DR 80) ---'
+s←1(220⌶)'A'
+⎕←'Char8 scalar A:    len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)'hello'
+⎕←'Char8 vec hello:   len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)'ab'
+⎕←'Char8 vec ab:      len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)2 3⍴'abcdef'
+⎕←'Char8 mat 2x3:     len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Char16 (⎕DR 160) ---
+⎕←'--- Char16 (⎕DR 160) ---'
+s←1(220⌶)'⍴'
+⎕←'Char16 scalar ⍴:   len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)'⍴⍳∊'
+⎕←'Char16 vec ⍴⍳∊:    len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)2 3⍴'⍴⍳∊⌈⌊⍕'
+⎕←'Char16 mat 2x3:    len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Char32 (⎕DR 320) ---
+⎕←'--- Char32 (⎕DR 320) ---'
+:Trap 0
+  s←1(220⌶)⎕UCS 128512
+  ⎕←'Char32 scalar 😀:  len=',⍕≢s
+  ⎕←'  bytes: ',fmt s
+  s←1(220⌶)⎕UCS 128512 128513 128514
+  ⎕←'Char32 vec 3:      len=',⍕≢s
+  ⎕←'  bytes: ',fmt s
+:Else
+  ⎕←'Char32: failed (may not support codepoints > 65535)'
+  ⍝ Try mixing ASCII with high unicode
+  :Trap 0
+    s←1(220⌶)⎕UCS 65 9786 128512
+    ⎕←'Char32 mixed:      len=',⍕≢s
+    ⎕←'  bytes: ',fmt s
+  :Else
+    ⎕←'Char32 mixed: also failed'
+  :EndTrap
+:EndTrap
+
+⎕←''
+⍝ --- Complex128 (⎕DR 1289) ---
+⎕←'--- Complex128 (⎕DR 1289) ---'
+:Trap 0
+  s←1(220⌶)1J2
+  ⎕←'Complex scalar 1J2:len=',⍕≢s
+  ⎕←'  bytes: ',fmt s
+  s←1(220⌶)1J2 3J4 5J6
+  ⎕←'Complex vec:       len=',⍕≢s
+  ⎕←'  bytes: ',fmt s
+  s←1(220⌶)2 2⍴1J2 3J4 5J6 7J8
+  ⎕←'Complex mat 2x2:   len=',⍕≢s
+  ⎕←'  bytes: ',fmt s
+:Else
+  ⎕←'Complex: serialization failed'
+:EndTrap
+
+⎕←''
+⍝ --- Decimal128 (⎕DR 1287) ---
+⎕←'--- Decimal128 (⎕DR 1287) ---'
+savefr←⎕FR
+:Trap 0
+  ⎕FR←1287
+  s←1(220⌶)1.5
+  ⎕←'Dec scalar 1.5:    len=',⍕≢s
+  ⎕←'  bytes: ',fmt s
+  s←1(220⌶)1.5 2.5 3.5
+  ⎕←'Dec vec:           len=',⍕≢s
+  ⎕←'  bytes: ',fmt s
+  ⎕FR←savefr
+:Else
+  ⎕←'Decimal128: not available'
+  ⎕FR←savefr
+:EndTrap
+
+⎕←''
+⍝ --- Pointer/Nested (⎕DR 326) ---
+⎕←'--- Pointer/Nested (⎕DR 326) ---'
+s←1(220⌶)(1 2)(3 4)
+⎕←'Nested (1 2)(3 4): len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)('hello' 42)
+⎕←'Nested hello 42:   len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)(1 (2 (3 4)))
+⎕←'Deep nested:       len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)((1 0 1) 'abc' (1.5 2.5) 100000)
+⎕←'Mixed nested:      len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)2 2⍴(1 2)(3 4)(5 6)(7 8)
+⎕←'Nested mat 2x2:    len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Empty vectors ---
+⎕←'--- Empty vectors ---'
+s←1(220⌶)⍬
+⎕←'Empty num ⍬:       len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)''
+⎕←'Empty char:        len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)(0⍴0)
+⎕←'Empty 0⍴0:        len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Edge cases: scalars that promote type ---
+⎕←'--- Scalar type boundaries ---'
+s←1(220⌶)0
+⎕←'Scalar 0:          len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)127
+⎕←'Scalar 127:        len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)128
+⎕←'Scalar 128:        len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)255
+⎕←'Scalar 255:        len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)256
+⎕←'Scalar 256:        len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)32767
+⎕←'Scalar 32767:      len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)32768
+⎕←'Scalar 32768:      len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)¯1
+⎕←'Scalar ¯1:         len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)¯128
+⎕←'Scalar ¯128:       len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)¯129
+⎕←'Scalar ¯129:       len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)¯32768
+⎕←'Scalar ¯32768:     len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)¯32769
+⎕←'Scalar ¯32769:     len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Int64 boundary (if exists) ---
+⎕←'--- Large integers ---'
+:Trap 0
+  s←1(220⌶)2147483647
+  ⎕←'Scalar 2^31-1:     len=',⍕≢s
+  ⎕←'  bytes: ',fmt s
+  s←1(220⌶)2147483648
+  ⎕←'Scalar 2^31:       len=',⍕≢s
+  ⎕←'  bytes: ',fmt s
+  ⍝ Check ⎕DR of these
+  ⎕←'  ⎕DR 2^31-1: ',⍕⎕DR 2147483647
+  ⎕←'  ⎕DR 2^31:   ',⍕⎕DR 2147483648
+:Else
+  ⎕←'Large int: failed'
+:EndTrap
+
+⎕←''
+⎕←'=== PHASE 3: Higher ranks shape encoding ==='
+⎕←''
+
+⍝ Compare how shape is encoded for different ranks
+⍝ Use Int8 for simplicity
+s←1(220⌶)⍳5
+⎕←'Vec ⍳5:            len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)1 5⍴⍳5
+⎕←'Mat 1x5:           len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)5 1⍴⍳5
+⎕←'Mat 5x1:           len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)1 1 5⍴⍳5
+⎕←'Rank3 1x1x5:       len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)1 1 1 5⍴⍳5
+⎕←'Rank4 1x1x1x5:     len=',⍕≢s
+⎕←'  bytes: ',fmt s
+s←1(220⌶)5 1 1 1⍴⍳5
+⎕←'Rank4 5x1x1x1:     len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⍝ Also try with float to see if shape encoding is independent of type
+s←1(220⌶)2 3⍴1.1 2.2 3.3 4.4 5.5 6.6
+⎕←'Float mat 2x3:     len=',⍕≢s
+⎕←'  first40: ',fmt 40↑s
+
+⎕←''
+⎕←'=== DONE ==='

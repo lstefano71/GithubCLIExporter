@@ -50,7 +50,8 @@ body {
   background: var(--bg); color: var(--fg); margin: 0; padding: 0;
   line-height: 1.6; font-size: 15px;
 }
-.container { margin: 0 auto; padding: 2rem 4rem; }
+.container { margin: 0 auto; padding: 2rem 4rem 2rem 4rem; }
+.has-minimap .container { padding-right: 5.5rem; }
 h1 { font-size: 1.8rem; border-bottom: 2px solid var(--accent); padding-bottom: 0.5rem; margin-top: 0; }
 h2 { font-size: 1.4rem; color: var(--accent); margin-top: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
 h3 { font-size: 1.1rem; margin-top: 1.5rem; }
@@ -114,6 +115,41 @@ details > .detail-content { padding: 0.75rem 1rem; }
 .toc > ul { padding-left: 0; }
 .toc a { text-decoration: none; }
 .toc a:hover { text-decoration: underline; }
+/* --- Minimap sidebar --- */
+.minimap {
+  position: fixed; right: 0; top: 0; bottom: 0; width: 4.5rem;
+  background: var(--bg2); border-left: 1px solid var(--border);
+  overflow-y: auto; overflow-x: hidden; z-index: 90;
+  padding: 3rem 0 1rem 0; scrollbar-width: none;
+}
+.minimap::-webkit-scrollbar { display: none; }
+.minimap-entry {
+  display: flex; align-items: center; gap: 0.25rem;
+  padding: 0.2rem 0.4rem; cursor: pointer; position: relative;
+  transition: background 0.15s;
+}
+.minimap-entry:hover { background: var(--border); }
+.minimap-entry.active { background: var(--accent); }
+.minimap-entry.active .minimap-ts { color: #fff; font-weight: 700; }
+.minimap-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.minimap-dot-user { background: var(--accent); }
+.minimap-dot-assistant { background: var(--accent2); }
+.minimap-ts { font-size: 0.65rem; color: var(--fg); opacity: 0.7; white-space: nowrap; }
+.minimap-entry.active .minimap-dot { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent); }
+.minimap-tooltip {
+  display: none; position: absolute; right: 100%; top: 50%; transform: translateY(-50%);
+  background: var(--fg); color: var(--bg); padding: 0.4rem 0.6rem; border-radius: 6px;
+  font-size: 0.75rem; white-space: nowrap; max-width: 350px; overflow: hidden;
+  text-overflow: ellipsis; pointer-events: none; z-index: 200;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+.minimap-entry:hover .minimap-tooltip { display: block; }
+@media (max-width: 768px) {
+  .minimap { display: none; }
+  .has-minimap .container { padding-right: 1rem; }
+}
 @media (max-width: 640px) {
   .container { padding: 1rem; }
   h1 { font-size: 1.4rem; }
@@ -126,6 +162,7 @@ details > .detail-content { padding: 0.75rem 1rem; }
 
 _JS = """
 (function() {
+  // --- Theme toggle ---
   const btn = document.getElementById('theme-toggle');
   const html = document.documentElement;
   const saved = localStorage.getItem('theme');
@@ -137,6 +174,62 @@ _JS = """
     localStorage.setItem('theme', next);
     btn.textContent = next === 'dark' ? '☀️' : '🌙';
   });
+
+  // --- Minimap ---
+  const minimap = document.getElementById('minimap');
+  if (!minimap) return;
+  const turns = document.querySelectorAll('.turn[data-ts]');
+  if (!turns.length) return;
+
+  document.body.classList.add('has-minimap');
+
+  turns.forEach(function(turn, i) {
+    const entry = document.createElement('div');
+    entry.className = 'minimap-entry';
+    entry.dataset.target = turn.id;
+
+    const dot = document.createElement('span');
+    const role = turn.dataset.role || 'assistant';
+    dot.className = 'minimap-dot minimap-dot-' + role;
+    entry.appendChild(dot);
+
+    const ts = document.createElement('span');
+    ts.className = 'minimap-ts';
+    ts.textContent = turn.dataset.ts || '';
+    entry.appendChild(ts);
+
+    const tooltip = document.createElement('span');
+    tooltip.className = 'minimap-tooltip';
+    const preview = turn.dataset.preview || '';
+    const roleIcon = role === 'user' ? '👤' : '🤖';
+    tooltip.textContent = roleIcon + ' ' + (turn.dataset.ts || '') + '  ' + preview;
+    entry.appendChild(tooltip);
+
+    entry.addEventListener('click', function() {
+      turn.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    minimap.appendChild(entry);
+  });
+
+  // IntersectionObserver to highlight current turn
+  const entries = minimap.querySelectorAll('.minimap-entry');
+  let currentActive = null;
+  const observer = new IntersectionObserver(function(ioEntries) {
+    ioEntries.forEach(function(ioEntry) {
+      if (ioEntry.isIntersecting) {
+        const id = ioEntry.target.id;
+        const mapEntry = minimap.querySelector('[data-target=\"' + id + '\"]');
+        if (mapEntry) {
+          if (currentActive) currentActive.classList.remove('active');
+          mapEntry.classList.add('active');
+          currentActive = mapEntry;
+          mapEntry.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }
+    });
+  }, { rootMargin: '-10% 0px -70% 0px', threshold: 0 });
+
+  turns.forEach(function(turn) { observer.observe(turn); });
 })();
 """
 
@@ -154,6 +247,7 @@ def render_html(session: ParsedSession) -> str:
     w(f"<style>{_CSS}</style>\n")
     w("</head>\n<body>\n")
     w("<button id=\"theme-toggle\" class=\"theme-toggle\">🌙</button>\n")
+    w("<div id=\"minimap\" class=\"minimap\"></div>\n")
     w("<div class=\"container\">\n")
 
     _html_header(w, session)
@@ -251,7 +345,9 @@ def _html_conversation(w, session: ParsedSession) -> None:
 
 def _html_user_turn(w, turn: ConversationTurn, idx: int) -> None:
     ts = _fmt_ts(turn.timestamp)
-    w(f"<div class=\"turn turn-user\" id=\"turn-{idx}\">\n")
+    ts_short = _fmt_ts_short(turn.timestamp)
+    preview = _esc(_preview(turn.content, 80))
+    w(f"<div class=\"turn turn-user\" id=\"turn-{idx}\" data-ts=\"{ts_short}\" data-role=\"user\" data-preview=\"{preview}\">\n")
     w(f"<div class=\"turn-header\">👤 User {ts}</div>\n")
     w(f"<div class=\"turn-content\">{_md_to_html(turn.content.strip())}</div>\n")
     w("</div>\n")
@@ -259,7 +355,11 @@ def _html_user_turn(w, turn: ConversationTurn, idx: int) -> None:
 
 def _html_assistant_turn(w, turn: ConversationTurn, idx: int) -> None:
     ts = _fmt_ts(turn.timestamp)
-    w(f"<div class=\"turn turn-assistant\" id=\"turn-{idx}\">\n")
+    ts_short = _fmt_ts_short(turn.timestamp)
+    preview = _esc(_preview(turn.content, 80))
+    tool_count = len(turn.tool_calls)
+    extra = f" + {tool_count} tools" if tool_count else ""
+    w(f"<div class=\"turn turn-assistant\" id=\"turn-{idx}\" data-ts=\"{ts_short}\" data-role=\"assistant\" data-preview=\"{preview}{_esc(extra)}\">\n")
     w(f"<div class=\"turn-header\">🤖 Assistant {ts}</div>\n")
 
     if turn.thinking:
@@ -428,3 +528,21 @@ def _fmt_ts(ts) -> str:
     if ts is None:
         return ""
     return f"({ts.strftime('%H:%M:%S')})"
+
+
+def _fmt_ts_short(ts) -> str:
+    if ts is None:
+        return ""
+    return ts.strftime('%H:%M')
+
+
+def _preview(text: str | None, max_len: int = 80) -> str:
+    if not text:
+        return ""
+    line = text.strip().replace('\n', ' ')[:max_len]
+    return line
+
+
+def _esc(text: str) -> str:
+    """Escape for HTML attributes."""
+    return text.replace('&', '&amp;').replace('"', '&quot;').replace('<', '&lt;').replace('>', '&gt;')

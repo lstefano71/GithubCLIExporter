@@ -51,7 +51,7 @@ body {
   line-height: 1.6; font-size: 15px;
 }
 .container { margin: 0 auto; padding: 2rem 4rem 2rem 4rem; }
-.has-minimap .container { padding-right: 5.5rem; }
+.has-minimap .container { padding-right: 2.5rem; }
 h1 { font-size: 1.8rem; border-bottom: 2px solid var(--accent); padding-bottom: 0.5rem; margin-top: 0; }
 h2 { font-size: 1.4rem; color: var(--accent); margin-top: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
 h3 { font-size: 1.1rem; margin-top: 1.5rem; }
@@ -115,39 +115,55 @@ details > .detail-content { padding: 0.75rem 1rem; }
 .toc > ul { padding-left: 0; }
 .toc a { text-decoration: none; }
 .toc a:hover { text-decoration: underline; }
-/* --- Minimap sidebar --- */
-.minimap {
-  position: fixed; right: 0; top: 0; bottom: 0; width: 4.5rem;
+/* --- Scroll track (minimap) --- */
+html.has-minimap { scrollbar-width: none; }
+html.has-minimap::-webkit-scrollbar { display: none; }
+.scroll-track {
+  position: fixed; right: 0; top: 0; bottom: 0; width: 24px;
   background: var(--bg2); border-left: 1px solid var(--border);
-  overflow-y: auto; overflow-x: hidden; z-index: 90;
-  padding: 3rem 0 1rem 0; scrollbar-width: none;
+  z-index: 90; cursor: pointer; overflow: hidden;
 }
-.minimap::-webkit-scrollbar { display: none; }
-.minimap-entry {
-  display: flex; align-items: center; gap: 0.25rem;
-  padding: 0.2rem 0.4rem; cursor: pointer; position: relative;
-  transition: background 0.15s;
+.scroll-track .viewport-indicator {
+  position: absolute; left: 0; right: 0;
+  background: var(--accent); opacity: 0.18;
+  border-radius: 2px; pointer-events: auto; cursor: grab;
+  transition: opacity 0.12s;
 }
-.minimap-entry:hover { background: var(--border); }
-.minimap-entry.active { background: var(--accent); }
-.minimap-entry.active .minimap-ts { color: #fff; font-weight: 700; }
-.minimap-dot {
-  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+.scroll-track .viewport-indicator:hover,
+.scroll-track .viewport-indicator.dragging { opacity: 0.32; cursor: grabbing; }
+.scroll-track .tick {
+  position: absolute; left: 4px; right: 4px; height: 3px;
+  border-radius: 1.5px; pointer-events: none;
 }
-.minimap-dot-user { background: var(--accent); }
-.minimap-dot-assistant { background: var(--accent2); }
-.minimap-ts { font-size: 0.65rem; color: var(--fg); opacity: 0.7; white-space: nowrap; }
-.minimap-entry.active .minimap-dot { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent); }
-.minimap-tooltip {
-  display: none; position: absolute; right: 100%; top: 50%; transform: translateY(-50%);
-  background: var(--fg); color: var(--bg); padding: 0.4rem 0.6rem; border-radius: 6px;
-  font-size: 0.75rem; white-space: nowrap; max-width: 350px; overflow: hidden;
-  text-overflow: ellipsis; pointer-events: none; z-index: 200;
-  box-shadow: 0 2px 8px var(--shadow);
+.scroll-track .tick-user { background: var(--accent); }
+.scroll-track .tick-assistant { background: var(--accent2); }
+.scroll-track .tick.active { left: 2px; right: 2px; height: 4px; opacity: 1; box-shadow: 0 0 4px var(--accent); }
+/* --- Hover detail panel --- */
+.track-detail {
+  display: none; position: fixed; right: 28px; z-index: 200;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.4rem 0; min-width: 260px; max-width: 380px;
+  box-shadow: 0 4px 16px var(--shadow); font-size: 0.82rem;
+  pointer-events: none;
 }
-.minimap-entry:hover .minimap-tooltip { display: block; }
+.track-detail.visible { display: block; }
+.track-detail-entry {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.25rem 0.75rem; white-space: nowrap; overflow: hidden;
+}
+.track-detail-entry.current { background: var(--bg2); font-weight: 600; }
+.track-detail-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+}
+.track-detail-dot-user { background: var(--accent); }
+.track-detail-dot-assistant { background: var(--accent2); }
+.track-detail-ts { opacity: 0.6; flex-shrink: 0; }
+.track-detail-text { overflow: hidden; text-overflow: ellipsis; }
+.theme-toggle { right: 28px; }
 @media (max-width: 768px) {
-  .minimap { display: none; }
+  .scroll-track, .track-detail { display: none !important; }
+  html.has-minimap { scrollbar-width: auto; }
+  html.has-minimap::-webkit-scrollbar { display: initial; }
   .has-minimap .container { padding-right: 1rem; }
 }
 @media (max-width: 640px) {
@@ -163,73 +179,195 @@ details > .detail-content { padding: 0.75rem 1rem; }
 _JS = """
 (function() {
   // --- Theme toggle ---
-  const btn = document.getElementById('theme-toggle');
-  const html = document.documentElement;
-  const saved = localStorage.getItem('theme');
+  var btn = document.getElementById('theme-toggle');
+  var html = document.documentElement;
+  var saved = localStorage.getItem('theme');
   if (saved) html.setAttribute('data-theme', saved);
   btn.addEventListener('click', function() {
-    const current = html.getAttribute('data-theme');
-    const next = current === 'dark' ? 'light' : 'dark';
+    var current = html.getAttribute('data-theme');
+    var next = current === 'dark' ? 'light' : 'dark';
     html.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
     btn.textContent = next === 'dark' ? '☀️' : '🌙';
   });
 
-  // --- Minimap ---
-  const minimap = document.getElementById('minimap');
-  if (!minimap) return;
-  const turns = document.querySelectorAll('.turn[data-ts]');
+  // --- Scroll track (proportional minimap) ---
+  var track = document.getElementById('scroll-track');
+  var detail = document.getElementById('track-detail');
+  if (!track || !detail) return;
+  var turns = document.querySelectorAll('.turn[data-ts]');
   if (!turns.length) return;
 
-  document.body.classList.add('has-minimap');
+  html.classList.add('has-minimap');
 
-  turns.forEach(function(turn, i) {
-    const entry = document.createElement('div');
-    entry.className = 'minimap-entry';
-    entry.dataset.target = turn.id;
-
-    const dot = document.createElement('span');
-    const role = turn.dataset.role || 'assistant';
-    dot.className = 'minimap-dot minimap-dot-' + role;
-    entry.appendChild(dot);
-
-    const ts = document.createElement('span');
-    ts.className = 'minimap-ts';
-    ts.textContent = turn.dataset.ts || '';
-    entry.appendChild(ts);
-
-    const tooltip = document.createElement('span');
-    tooltip.className = 'minimap-tooltip';
-    const preview = turn.dataset.preview || '';
-    const roleIcon = role === 'user' ? '👤' : '🤖';
-    tooltip.textContent = roleIcon + ' ' + (turn.dataset.ts || '') + '  ' + preview;
-    entry.appendChild(tooltip);
-
-    entry.addEventListener('click', function() {
-      turn.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Build turn data array: { el, top, role, ts, preview }
+  var turnData = [];
+  turns.forEach(function(el) {
+    turnData.push({
+      el: el,
+      role: el.dataset.role || 'assistant',
+      ts: el.dataset.ts || '',
+      preview: el.dataset.preview || ''
     });
-    minimap.appendChild(entry);
   });
 
-  // IntersectionObserver to highlight current turn
-  const entries = minimap.querySelectorAll('.minimap-entry');
-  let currentActive = null;
-  const observer = new IntersectionObserver(function(ioEntries) {
-    ioEntries.forEach(function(ioEntry) {
-      if (ioEntry.isIntersecting) {
-        const id = ioEntry.target.id;
-        const mapEntry = minimap.querySelector('[data-target=\"' + id + '\"]');
-        if (mapEntry) {
-          if (currentActive) currentActive.classList.remove('active');
-          mapEntry.classList.add('active');
-          currentActive = mapEntry;
-          mapEntry.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
+  // Compute proportional positions of ticks and place them
+  var ticks = [];
+  function layoutTicks() {
+    var docH = document.documentElement.scrollHeight;
+    var trackH = track.clientHeight;
+    turnData.forEach(function(td, i) {
+      var tick = ticks[i];
+      if (!tick) {
+        tick = document.createElement('div');
+        tick.className = 'tick tick-' + td.role;
+        track.appendChild(tick);
+        ticks[i] = tick;
+      }
+      var elTop = td.el.getBoundingClientRect().top + window.scrollY;
+      var pct = elTop / docH;
+      tick.style.top = (pct * trackH) + 'px';
+    });
+  }
+
+  // Viewport indicator
+  var vp = document.createElement('div');
+  vp.className = 'viewport-indicator';
+  track.appendChild(vp);
+
+  function updateViewport() {
+    var docH = document.documentElement.scrollHeight;
+    var winH = window.innerHeight;
+    var scrollY = window.scrollY;
+    var trackH = track.clientHeight;
+    var ratio = winH / docH;
+    var vpH = Math.max(ratio * trackH, 20);
+    var vpTop = (scrollY / docH) * trackH;
+    vp.style.height = vpH + 'px';
+    vp.style.top = vpTop + 'px';
+  }
+
+  // Active tick tracking
+  var activeTick = null;
+  function updateActiveTick() {
+    var scrollY = window.scrollY;
+    var winH = window.innerHeight;
+    var best = -1;
+    var bestDist = Infinity;
+    turnData.forEach(function(td, i) {
+      var elTop = td.el.getBoundingClientRect().top + window.scrollY;
+      if (elTop >= scrollY && elTop <= scrollY + winH) {
+        var dist = Math.abs(elTop - scrollY - winH * 0.15);
+        if (dist < bestDist) { bestDist = dist; best = i; }
       }
     });
-  }, { rootMargin: '-10% 0px -70% 0px', threshold: 0 });
+    if (activeTick !== null && ticks[activeTick]) ticks[activeTick].classList.remove('active');
+    if (best >= 0 && ticks[best]) { ticks[best].classList.add('active'); activeTick = best; }
+  }
 
-  turns.forEach(function(turn) { observer.observe(turn); });
+  function onScroll() {
+    updateViewport();
+    updateActiveTick();
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', function() { layoutTicks(); onScroll(); });
+
+  // --- Click to jump ---
+  track.addEventListener('click', function(e) {
+    if (e.target === vp) return;
+    var trackH = track.clientHeight;
+    var docH = document.documentElement.scrollHeight;
+    var winH = window.innerHeight;
+    var rect = track.getBoundingClientRect();
+    var y = e.clientY - rect.top;
+    var pct = y / trackH;
+    var scrollTo = pct * docH - winH / 2;
+    window.scrollTo({ top: Math.max(0, scrollTo), behavior: 'smooth' });
+  });
+
+  // --- Drag viewport indicator ---
+  var dragging = false;
+  var dragStartY = 0, dragStartScroll = 0;
+  vp.addEventListener('mousedown', function(e) {
+    dragging = true;
+    dragStartY = e.clientY;
+    dragStartScroll = window.scrollY;
+    vp.classList.add('dragging');
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (!dragging) return;
+    var trackH = track.clientHeight;
+    var docH = document.documentElement.scrollHeight;
+    var dy = e.clientY - dragStartY;
+    var scrollDelta = (dy / trackH) * docH;
+    window.scrollTo({ top: dragStartScroll + scrollDelta });
+  });
+  document.addEventListener('mouseup', function() {
+    if (dragging) { dragging = false; vp.classList.remove('dragging'); }
+  });
+
+  // --- Hover detail panel ---
+  var DETAIL_COUNT = 7;
+  var HALF = Math.floor(DETAIL_COUNT / 2);
+
+  track.addEventListener('mousemove', function(e) {
+    if (dragging) { detail.classList.remove('visible'); return; }
+    var rect = track.getBoundingClientRect();
+    var y = e.clientY - rect.top;
+    var trackH = track.clientHeight;
+    var docH = document.documentElement.scrollHeight;
+    var pct = y / trackH;
+    var docPos = pct * docH;
+
+    // Find nearest turn index
+    var nearest = 0;
+    var nearestDist = Infinity;
+    turnData.forEach(function(td, i) {
+      var elTop = td.el.getBoundingClientRect().top + window.scrollY;
+      var dist = Math.abs(elTop - docPos);
+      if (dist < nearestDist) { nearestDist = dist; nearest = i; }
+    });
+
+    // Window of entries around nearest
+    var start = Math.max(0, nearest - HALF);
+    var end = Math.min(turnData.length, start + DETAIL_COUNT);
+    if (end - start < DETAIL_COUNT) start = Math.max(0, end - DETAIL_COUNT);
+
+    detail.innerHTML = '';
+    for (var i = start; i < end; i++) {
+      var td = turnData[i];
+      var row = document.createElement('div');
+      row.className = 'track-detail-entry' + (i === nearest ? ' current' : '');
+      var dot = document.createElement('span');
+      dot.className = 'track-detail-dot track-detail-dot-' + td.role;
+      row.appendChild(dot);
+      var ts = document.createElement('span');
+      ts.className = 'track-detail-ts';
+      ts.textContent = td.ts;
+      row.appendChild(ts);
+      var txt = document.createElement('span');
+      txt.className = 'track-detail-text';
+      var icon = td.role === 'user' ? '👤 ' : '🤖 ';
+      txt.textContent = icon + td.preview;
+      row.appendChild(txt);
+      detail.appendChild(row);
+    }
+
+    // Position panel vertically centered on mouse
+    var panelH = DETAIL_COUNT * 26;
+    var panelTop = Math.max(4, Math.min(e.clientY - panelH / 2, window.innerHeight - panelH - 4));
+    detail.style.top = panelTop + 'px';
+    detail.classList.add('visible');
+  });
+
+  track.addEventListener('mouseleave', function() {
+    detail.classList.remove('visible');
+  });
+
+  // Initial layout
+  layoutTicks();
+  onScroll();
 })();
 """
 
@@ -247,7 +385,8 @@ def render_html(session: ParsedSession) -> str:
     w(f"<style>{_CSS}</style>\n")
     w("</head>\n<body>\n")
     w("<button id=\"theme-toggle\" class=\"theme-toggle\">🌙</button>\n")
-    w("<div id=\"minimap\" class=\"minimap\"></div>\n")
+    w("<div id=\"scroll-track\" class=\"scroll-track\"></div>\n")
+    w("<div id=\"track-detail\" class=\"track-detail\"></div>\n")
     w("<div class=\"container\">\n")
 
     _html_header(w, session)

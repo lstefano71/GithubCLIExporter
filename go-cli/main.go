@@ -17,9 +17,14 @@ func main() {
 	var sessionsDir string
 
 	rootCmd := &cobra.Command{
-		Use:   "copilot-export",
-		Short: "Export Copilot CLI sessions to Markdown and HTML",
+		Use:     "copilot-export",
+		Short:   "Export Copilot CLI sessions to Markdown and HTML",
+		Version: version,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			fmt.Println(shortVersion())
+		},
 	}
+	rootCmd.SetVersionTemplate(fullVersion() + "\n")
 	rootCmd.PersistentFlags().StringVar(&sessionsDir, "sessions-dir", "", "Override sessions directory (default: ~/.copilot/session-state/)")
 
 	// ---- list ----

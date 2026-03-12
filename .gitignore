@@ -18,3 +18,5 @@ myenv/
 # OS
 Thumbs.db
 .DS_Store
+go-cli/*.exe
+

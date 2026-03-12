@@ -1,0 +1,99 @@
+name: Pre-release
+
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  prerelease:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go-cli/go.mod
+
+      - name: Compute version
+        id: version
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          # Sanitise branch name for use in a semver pre-release identifier
+          SLUG=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+          SHORT_SHA="${GITHUB_SHA::7}"
+          VERSION="0.0.0-${SLUG}.${SHORT_SHA}"
+          TAG="pre-${SLUG}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+          echo "slug=$SLUG"       >> "$GITHUB_OUTPUT"
+
+      - name: Build binaries
+        working-directory: go-cli
+        run: |
+          set -e
+          VERSION="${{ steps.version.outputs.version }}"
+          COMMIT="${GITHUB_SHA::12}"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}"
+
+          mkdir -p ../dist
+
+          GOOS=linux   GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "../dist/copilot-export_${VERSION}_linux_amd64/copilot-export" .
+          GOOS=darwin  GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "../dist/copilot-export_${VERSION}_darwin_amd64/copilot-export" .
+          GOOS=darwin  GOARCH=arm64 go build -ldflags "$LDFLAGS" -o "../dist/copilot-export_${VERSION}_darwin_arm64/copilot-export" .
+          GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o "../dist/copilot-export_${VERSION}_windows_amd64/copilot-export.exe" .
+
+      - name: Package archives
+        run: |
+          set -e
+          VERSION="${{ steps.version.outputs.version }}"
+          cd dist
+
+          for dir in *linux* *darwin*; do
+            tar -czf "${dir}.tar.gz" -C "$dir" .
+          done
+          for dir in *windows*; do
+            (cd "$dir" && zip -q "../${dir}.zip" *)
+          done
+
+          sha256sum *.tar.gz *.zip > checksums.txt
+
+      - name: Delete previous pre-release for this branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          # Delete the release (ignore errors if it doesn't exist)
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+
+      - name: Create pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          SLUG="${{ steps.version.outputs.slug }}"
+
+          # Build release notes with recent commits
+          NOTES="## Pre-release from branch \`${GITHUB_REF_NAME}\`
+
+          **Version:** \`${VERSION}\`
+          **Commit:** ${GITHUB_SHA::12}
+
+          ### Recent commits
+          $(git log --oneline -15)
+
+          ---
+          *This is an automated pre-release build. For stable releases, see the [latest release](../../releases/latest).*"
+
+          gh release create "$TAG" \
+            --title "Pre-release: ${SLUG} (${GITHUB_SHA::7})" \
+            --notes "$NOTES" \
+            --prerelease \
+            dist/*.tar.gz dist/*.zip dist/checksums.txt

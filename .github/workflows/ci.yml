@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go-cli/go.mod
+
+      - name: Build
+        working-directory: go-cli
+        run: go build -v ./...
+
+      - name: Test
+        working-directory: go-cli
+        run: go test -v ./...

@@ -1,5 +1,7 @@
 # Copilot CLI Session Exporter
 
+[![Release](https://img.shields.io/github/v/release/copilot-export/GithubCLIExporter?style=flat-square)](https://github.com/copilot-export/GithubCLIExporter/releases/latest)
+
 Export [GitHub Copilot CLI](https://githubnext.com/projects/copilot-cli) sessions to readable **Markdown** and **HTML** formats.
 
 ## Install
@@ -114,3 +116,32 @@ Notes:
 
 - Both CLIs read the same Copilot session state directory by default (`~/.copilot/session-state/`). Use the `--sessions-dir` flag or set `COPILOT_SESSIONS_DIR` (Python) to point to a custom location.
 - The Python package exposes the `copilot-export` console script (defined in the package entry points) and can be run via `python -m copilot_export` without installation.
+
+## Releases & Versioning
+
+Pre-built binaries are available from the [Releases page](../../releases).
+
+| Platform | Archive |
+|----------|---------|
+| Linux (x86_64) | `copilot-export_*_linux_amd64.tar.gz` |
+| macOS (Intel) | `copilot-export_*_darwin_amd64.tar.gz` |
+| macOS (Apple Silicon) | `copilot-export_*_darwin_arm64.tar.gz` |
+| Windows (x86_64) | `copilot-export_*_windows_amd64.zip` |
+
+### How versioning works
+
+- **Tagged releases** (`v1.0.0`, `v1.1.0`, …): Created by pushing a `v*` tag to `main`. These are full releases with changelogs generated from conventional commit messages.
+- **Pre-releases**: Every push to any branch automatically builds cross-platform binaries and creates a pre-release on GitHub. Pre-releases use the format `v0.0.0-{branch}.{commit}` and only the latest per branch is kept.
+
+### Version info in the binary
+
+The Go CLI embeds version information using Go's `runtime/debug.ReadBuildInfo()` and build-time `-ldflags` injection:
+
+```bash
+$ copilot-export --version
+copilot-export 1.0.0
+  commit: abc1234def01
+  built:  2026-03-12T15:00:00Z
+```
+
+When built locally without flags, the CLI shows `dev` as the version but still displays the commit hash and build time from the Go toolchain.

@@ -1,0 +1,127 @@
+﻿⍝ Probe Decimal128 (⎕DR 1287) serialization
+⍝ Key insight from docs: ⎕FR only affects NEW computations, not literal constants.
+⍝ So we must use arithmetic to produce Decimal128 values.
+
+⎕←'=== Decimal128 Probe ==='
+⎕←''
+
+⍝ Phase 1: Check if ⎕FR←1287 is supported
+⎕←'--- Phase 1: ⎕FR←1287 availability ---'
+⎕←'Current ⎕FR: ',⍕⎕FR
+savefr←⎕FR
+
+:Trap 0
+  ⎕FR←1287
+  ⎕←'⎕FR set to 1287 successfully'
+  ⎕←'⎕FR is now: ',⍕⎕FR
+:Else
+  ⎕←'ERROR: ⎕FR←1287 failed — Decimal128 not supported in this build'
+  →0
+:EndTrap
+
+⍝ Phase 2: Create Decimal128 values via COMPUTATION (not literals)
+⎕←''
+⎕←'--- Phase 2: Create Decimal128 values ---'
+
+⍝ Arithmetic forces computation at runtime when ⎕FR=1287
+x←1÷3
+⎕←'x←1÷3'
+⎕←'  ⎕DR x = ',⍕⎕DR x
+⎕←'  x = ',⍕x
+
+y←0+1.5
+⎕←'y←0+1.5'
+⎕←'  ⎕DR y = ',⍕⎕DR y
+
+z←1÷7
+⎕←'z←1÷7'
+⎕←'  ⎕DR z = ',⍕⎕DR z
+
+⍝ Create a vector via computation
+v←(1÷3)(1÷7)(0+2.5)
+⎕←'v←(1÷3)(1÷7)(0+2.5)'
+⎕←'  ⎕DR v = ',⍕⎕DR v
+⎕←'  ⍴v = ',⍕⍴v
+
+⍝ Try iota then divide
+iv←(⍳5)÷10
+⎕←'iv←(⍳5)÷10'
+⎕←'  ⎕DR iv = ',⍕⎕DR iv
+⎕←'  iv = ',⍕iv
+
+⍝ Phase 3: Serialize Decimal128 values
+⎕←''
+⎕←'--- Phase 3: Serialize with 220⌶ ---'
+
+:Trap 0
+  ⎕←'Serializing x (scalar 1÷3):'
+  sx←1(220⌶)x
+  ⎕←'  length = ',⍕≢sx
+  ⎕←'  bytes[0..19] = ',⍕256|20↑sx
+  ⎕←'  type_code bytes[10..11] = ',⍕256|sx[11 12]
+  tb←256|sx[12]
+  ⎕←'  type_byte = 0x',⎕SE.Dyalog.Utils.hexStr tb
+:Else
+  ⎕←'  ERROR serializing x: ',⎕DMX.Message
+:EndTrap
+
+:Trap 0
+  ⎕←''
+  ⎕←'Serializing iv (vector (⍳5)÷10):'
+  siv←1(220⌶)iv
+  ⎕←'  length = ',⍕≢siv
+  ⎕←'  bytes[0..25] = ',⍕256|26↑siv
+  ⎕←'  type_code bytes[10..11] = ',⍕256|siv[11 12]
+  tb←256|siv[12]
+  ⎕←'  type_byte = 0x',⎕SE.Dyalog.Utils.hexStr tb
+:Else
+  ⎕←'  ERROR serializing iv: ',⎕DMX.Message
+:EndTrap
+
+⍝ Phase 4: Try hex formatting without ⎕SE utilities
+⎕←''
+⎕←'--- Phase 4: Raw byte dump ---'
+
+:Trap 0
+  ⎕←'x scalar raw bytes (all): ',⍕256|sx
+:Else
+  ⎕←'  (skipping — variable not available)'
+:EndTrap
+
+:Trap 0
+  ⎕←'iv vector raw bytes (all): ',⍕256|siv
+:Else
+  ⎕←'  (skipping — variable not available)'
+:EndTrap
+
+⍝ Phase 5: Write to DCF and verify round-trip
+⎕←''
+⎕←'--- Phase 5: DCF round-trip ---'
+
+:Trap 0
+  file←'test_decimal128.dcf'
+  ⎕NDELETE file
+  tn←file ⎕FCREATE 0 ⍠('J' 0)('C' 1)('Z' 0)
+  
+  x ⎕FAPPEND tn
+  iv ⎕FAPPEND tn
+  
+  ⍝ Read back
+  rx←⎕FREAD tn 1
+  riv←⎕FREAD tn 2
+  ⎕←'Read back x:   ⎕DR=',⍕⎕DR rx
+  ⎕←'Read back iv:  ⎕DR=',⍕⎕DR riv
+  ⎕←'x round-trip OK: ',⍕x≡rx
+  ⎕←'iv round-trip OK: ',⍕iv≡riv
+  
+  ⎕FUNTIE tn
+  ⎕←'DCF file created: ',file
+:Else
+  ⎕←'DCF ERROR: ',⎕DMX.Message
+:EndTrap
+
+⍝ Restore ⎕FR
+⎕FR←savefr
+⎕←''
+⎕←'⎕FR restored to: ',⍕⎕FR
+⎕←'=== Done ==='

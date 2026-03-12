@@ -1,0 +1,421 @@
+"""
+Analyze serialized array format in DCF component files.
+
+Parses the 220⌶ serialization format embedded in DCF component payloads.
+Works with test_types_*.dcf files created by create_test_types.apls.
+
+Known type byte mapping (from previous work + this investigation):
+  0x21 = Boolean (⎕DR 11)     - 1 bit per element
+  0x22 = Int8    (⎕DR 83)     - 1 byte signed
+  0x23 = Int16   (⎕DR 163)    - 2 bytes signed (hypothesized)
+  0x24 = Int32   (⎕DR 323)    - 4 bytes signed (hypothesized)
+  0x25 = Float64 (⎕DR 645)    - 8 bytes IEEE 754
+  0x26 = Pointer (⎕DR 326)    - nested array reference (hypothesized)
+  0x27 = Char8   (⎕DR 80)     - 1 byte character
+  0x28 = Char16  (⎕DR 160)    - 2 byte Unicode character
+  0x29 = Char32  (⎕DR 320)    - 4 byte Unicode character (hypothesized)
+  0x2A = Complex (⎕DR 1289)   - 16 bytes (hypothesized)
+  0x2B = Dec128  (⎕DR 1287)   - 16 bytes (hypothesized)
+
+Rank byte mapping:
+  0x0F = scalar (rank 0)
+  0x1F = vector (rank 1)
+  0x2F = matrix (rank 2)
+  0x3F = rank 3
+  0x4F = rank 4
+  pattern: (rank << 4) | 0x0F
+"""
+
+import struct
+import sys
+import os
+
+# === Type lookup tables ===
+
+TYPE_NAMES = {
+    0x21: 'Boolean (⎕DR 11)',
+    0x22: 'Int8 (⎕DR 83)',
+    0x23: 'Int16 (⎕DR 163)',
+    0x24: 'Int32 (⎕DR 323)',
+    0x25: 'Float64 (⎕DR 645)',
+    0x26: 'Pointer (⎕DR 326)',
+    0x27: 'Char8 (⎕DR 80)',
+    0x28: 'Char16 (⎕DR 160)',
+    0x29: 'Char32 (⎕DR 320)',
+    0x2A: 'Complex128 (⎕DR 1289)',
+    0x2B: 'Decimal128 (⎕DR 1287)',
+}
+
+ELEMENT_SIZES = {
+    0x21: 0.125,  # 1 bit
+    0x22: 1,
+    0x23: 2,
+    0x24: 4,
+    0x25: 8,
+    0x26: 8,  # pointer
+    0x27: 1,
+    0x28: 2,
+    0x29: 4,
+    0x2A: 16,
+    0x2B: 16,
+}
+
+BLOCK_MAGIC = 0xA40E14A4
+
+
+def parse_header(data):
+    """Parse DCF file header (72 bytes)."""
+    magic = data[0]
+    format_code = data[1]
+    span = struct.unpack_from('<H', data, 2)[0]
+    state = data[7]
+    first_comp = struct.unpack_from('<I', data, 8)[0]
+    next_comp = struct.unpack_from('<Q', data, 0x10)[0]
+    dir_offset = struct.unpack_from('<Q', data, 0x18)[0]
+    end_offset = struct.unpack_from('<Q', data, 0x28)[0]
+    alloc_size = struct.unpack_from('<Q', data, 0x30)[0]
+    
+    return {
+        'magic': magic,
+        'format_code': format_code,
+        'span': span,
+        'state': state,
+        'first_comp': first_comp,
+        'next_comp': next_comp,
+        'dir_offset': dir_offset,
+        'end_offset': end_offset,
+        'alloc_size': alloc_size,
+    }
+
+
+def decode_type_code(type_code):
+    """Decode the 16-bit type_code into rank and type byte."""
+    rank_byte = type_code & 0xFF
+    type_byte = (type_code >> 8) & 0xFF
+    
+    # Extract rank from rank_byte pattern: (rank << 4) | 0x0F
+    if (rank_byte & 0x0F) == 0x0F:
+        rank = (rank_byte >> 4) & 0x0F
+    else:
+        rank = -1  # unknown pattern
+    
+    type_name = TYPE_NAMES.get(type_byte, f'Unknown(0x{type_byte:02x})')
+    return rank, type_byte, type_name
+
+
+def parse_component_block(data, offset, comp_num, verbose=True):
+    """Parse a component block at the given offset."""
+    if offset + 0x18 > len(data):
+        print(f"  Comp {comp_num}: offset 0x{offset:x} past EOF")
+        return None
+    
+    alloc_size = struct.unpack_from('<I', data, offset)[0]
+    magic = struct.unpack_from('<I', data, offset + 4)[0]
+    ts_sec = struct.unpack_from('<I', data, offset + 0x10)[0]
+    ts_usec = struct.unpack_from('<I', data, offset + 0x14)[0]
+    
+    if magic != BLOCK_MAGIC:
+        print(f"  Comp {comp_num}: BAD MAGIC 0x{magic:08x} at offset 0x{offset:x}")
+        return None
+    
+    # Payload starts at offset + 0x18
+    payload_off = offset + 0x18
+    
+    # data_words at +0x18 (relative to block start)
+    data_words = struct.unpack_from('<Q', data, payload_off)[0]
+    
+    # type_code at +0x20
+    type_code = struct.unpack_from('<Q', data, payload_off + 8)[0]
+    
+    # element_count or scalar value at +0x28
+    element_count = struct.unpack_from('<Q', data, payload_off + 0x10)[0]
+    
+    rank, type_byte, type_name = decode_type_code(type_code & 0xFFFF)
+    
+    result = {
+        'comp_num': comp_num,
+        'offset': offset,
+        'alloc_size': alloc_size,
+        'data_words': data_words,
+        'type_code': type_code,
+        'type_byte': type_byte,
+        'rank': rank,
+        'type_name': type_name,
+        'element_count': element_count,
+    }
+    
+    if verbose:
+        print(f"  Comp {comp_num} @ 0x{offset:x}:")
+        print(f"    alloc_size={alloc_size}, data_words={data_words}")
+        print(f"    type_code=0x{type_code:04x} → type=0x{type_byte:02x} ({type_name}), rank={rank}")
+        print(f"    element_count={element_count}")
+    
+    # Parse shape for higher ranks
+    if rank >= 2:
+        shape = []
+        shape_off = payload_off + 0x18  # shape starts at +0x30 relative to block
+        for dim in range(rank):
+            if shape_off + 8 <= len(data):
+                dim_size = struct.unpack_from('<Q', data, shape_off)[0]
+                shape.append(dim_size)
+                shape_off += 8
+        result['shape'] = shape
+        if verbose:
+            print(f"    shape={shape}")
+    elif rank == 1:
+        result['shape'] = [element_count]
+    elif rank == 0:
+        result['shape'] = []
+        # For scalars, element_count field holds the value
+        if verbose:
+            if type_byte == 0x22:  # Int8
+                val = element_count if element_count < 128 else element_count - 256
+                print(f"    scalar_value={val}")
+            elif type_byte == 0x23:  # Int16
+                val = element_count if element_count < 32768 else element_count - 65536
+                print(f"    scalar_value={val}")
+            elif type_byte == 0x24:  # Int32
+                val = element_count if element_count < 2147483648 else element_count - 4294967296
+                print(f"    scalar_value={val}")
+            elif type_byte == 0x25:  # Float64
+                # The 8 bytes at element_count are the float
+                val = struct.unpack_from('<d', data, payload_off + 0x10)[0]
+                print(f"    scalar_value={val}")
+            elif type_byte == 0x21:  # Boolean
+                print(f"    scalar_value={element_count}")
+            else:
+                print(f"    scalar_value_raw=0x{element_count:x}")
+    
+    # Parse data area
+    if rank >= 1:
+        if rank >= 2:
+            data_start = payload_off + 0x18 + rank * 8
+        else:
+            data_start = payload_off + 0x18
+        
+        data_end = offset + alloc_size + 0x18  # approximate
+        raw_data = data[data_start:min(data_start + 64, len(data))]
+        
+        if verbose and len(raw_data) > 0:
+            if type_byte == 0x27:  # Char8
+                try:
+                    n = min(element_count, 80)
+                    text = data[data_start:data_start + n].decode('ascii', errors='replace')
+                    print(f"    data_text='{text}'")
+                except:
+                    pass
+            elif type_byte == 0x28:  # Char16
+                try:
+                    n = min(element_count, 40)
+                    text = data[data_start:data_start + n * 2].decode('utf-16-le', errors='replace')
+                    print(f"    data_text='{text}'")
+                except:
+                    pass
+            elif type_byte == 0x22:  # Int8
+                vals = list(data[data_start:data_start + min(element_count, 20)])
+                # Convert to signed
+                vals = [v if v < 128 else v - 256 for v in vals]
+                print(f"    data_int8={vals}")
+            elif type_byte == 0x23:  # Int16
+                n = min(element_count, 10)
+                vals = list(struct.unpack_from(f'<{n}h', data, data_start))
+                print(f"    data_int16={vals}")
+            elif type_byte == 0x24:  # Int32
+                n = min(element_count, 10)
+                vals = list(struct.unpack_from(f'<{n}i', data, data_start))
+                print(f"    data_int32={vals}")
+            elif type_byte == 0x25:  # Float64
+                n = min(element_count, 10)
+                vals = list(struct.unpack_from(f'<{n}d', data, data_start))
+                print(f"    data_float64={vals}")
+            elif type_byte == 0x21:  # Boolean
+                byte_count = (element_count + 7) // 8
+                bits = data[data_start:data_start + byte_count]
+                bit_vals = []
+                for b in bits:
+                    for bit in range(8):
+                        if len(bit_vals) < element_count:
+                            bit_vals.append((b >> bit) & 1)
+                print(f"    data_bool={bit_vals}")
+            elif type_byte == 0x26:  # Nested/Pointer
+                print(f"    data_raw_hex={raw_data[:32].hex()}")
+            else:
+                print(f"    data_raw_hex={raw_data[:32].hex()}")
+    
+    return result
+
+
+def walk_directory(data, dir_offset, level=1):
+    """Walk the B-tree directory to find component offsets.
+    Returns dict of comp_num -> offset."""
+    comps = {}
+    
+    if dir_offset + 128 > len(data):
+        return comps
+    
+    # Read 16 u64 entries
+    entries = []
+    for i in range(16):
+        val = struct.unpack_from('<Q', data, dir_offset + i * 8)[0]
+        entries.append(val)
+    
+    if level == 1:
+        # Leaf level: entries are direct component offsets
+        # Entry 0 is sentinel (should be 0 or 1)
+        for i in range(1, 16):
+            if entries[i] != 0:
+                comps[i - 1] = entries[i]  # comp i maps to offset
+    else:
+        # Non-leaf: entries point to child pages
+        for i in range(16):
+            if entries[i] != 0:
+                child_comps = walk_directory(data, entries[i], level - 1)
+                comps.update(child_comps)
+    
+    return comps
+
+
+def analyze_dcf_file(filename, max_comps=50):
+    """Analyze a DCF file and print component serialization details."""
+    if not os.path.exists(filename):
+        print(f"File not found: {filename}")
+        return
+    
+    data = open(filename, 'rb').read()
+    hdr = parse_header(data)
+    
+    print(f"\n{'='*60}")
+    print(f"File: {filename} ({len(data)} bytes)")
+    print(f"{'='*60}")
+    print(f"  format=0x{hdr['format_code']:02x}, span=0x{hdr['span']:04x}, "
+          f"state={hdr['state']}")
+    print(f"  components: {hdr['first_comp']}..{hdr['next_comp']-1} "
+          f"({hdr['next_comp'] - hdr['first_comp']} total)")
+    print(f"  dir_offset=0x{hdr['dir_offset']:x}, end_offset=0x{hdr['end_offset']:x}")
+    
+    num_comps = hdr['next_comp'] - hdr['first_comp']
+    
+    if num_comps == 0:
+        print("  (empty file)")
+        return
+    
+    # For small files, try linear scan approach
+    # The directory is a B-tree, but for simple cases we can walk linearly
+    # Starting after header (0x48) or metadata (0x100 for C=1)
+    
+    # Determine if C=1 (has metadata area)
+    has_meta = hdr['format_code'] in [0x14, 0x0E, 0x10, 0x12]  # J0C1, J1C1, J2C1, J3C1
+    
+    if has_meta:
+        first_block = 0x100  # After header + metadata
+    else:
+        first_block = 0x48  # After header only
+    
+    # Simple approach: walk the directory B-tree
+    tree_depth = hdr['state']
+    if tree_depth == 0:
+        tree_depth = 1  # Assume at least 1 level
+    
+    # For 1-level directory (up to 15 components):
+    comp_offsets = {}
+    dir_off = hdr['dir_offset']
+    
+    if num_comps <= 15:
+        # Single-level directory
+        for i in range(16):
+            val = struct.unpack_from('<Q', data, dir_off + i * 8)[0]
+            if val != 0 and i > 0:  # Entry 0 is sentinel
+                comp_offsets[hdr['first_comp'] + i - 1] = val
+    else:
+        # Multi-level: try a simpler approach — scan linearly
+        offset = first_block
+        comp_num = hdr['first_comp']
+        while offset < len(data) - 24 and comp_num < hdr['next_comp']:
+            magic = struct.unpack_from('<I', data, offset + 4)[0]
+            if magic == BLOCK_MAGIC:
+                comp_offsets[comp_num] = offset
+                alloc_size = struct.unpack_from('<I', data, offset)[0]
+                # Next block starts after this one (alloc_size + header, 8-byte aligned)
+                next_off = offset + 0x18 + alloc_size
+                next_off = (next_off + 7) & ~7  # Align to 8
+                offset = next_off
+                comp_num += 1
+            else:
+                offset += 8  # Skip and try next alignment
+    
+    print(f"\n  --- Components ({min(len(comp_offsets), max_comps)} shown) ---")
+    
+    results = []
+    for comp_num in sorted(comp_offsets.keys())[:max_comps]:
+        offset = comp_offsets[comp_num]
+        result = parse_component_block(data, offset, comp_num)
+        if result:
+            results.append(result)
+    
+    return results
+
+
+def parse_220_bytes(raw_bytes, label=""):
+    """Parse raw 220⌶ output bytes (unsigned)."""
+    if len(raw_bytes) < 10:
+        print(f"  {label}: too short ({len(raw_bytes)} bytes)")
+        return
+    
+    # Preamble: DF A4 xx xx 00 00 00 00 00 00
+    magic0 = raw_bytes[0]
+    magic1 = raw_bytes[1]
+    size_field = struct.unpack_from('<I', raw_bytes, 2)[0]
+    
+    print(f"  {label}:")
+    print(f"    magic: 0x{magic0:02x} 0x{magic1:02x}")
+    print(f"    size_field: {size_field} (0x{size_field:08x})")
+    print(f"    padding: {list(raw_bytes[6:10])}")
+    
+    if len(raw_bytes) >= 14:
+        # After preamble (10 bytes): type_code at byte 10
+        rank_byte = raw_bytes[10]
+        type_byte = raw_bytes[11]
+        rank = (rank_byte >> 4) & 0x0F if (rank_byte & 0x0F) == 0x0F else -1
+        type_name = TYPE_NAMES.get(type_byte, f'Unknown(0x{type_byte:02x})')
+        print(f"    type: 0x{type_byte:02x} ({type_name})")
+        print(f"    rank: {rank} (rank_byte=0x{rank_byte:02x})")
+    
+    if len(raw_bytes) >= 18:
+        count = struct.unpack_from('<I', raw_bytes, 12)[0]  # May be 4 or 8 bytes
+        print(f"    count/value: {count}")
+    
+    print(f"    all bytes: {list(raw_bytes)}")
+
+
+def main():
+    """Analyze all test_types_*.dcf files."""
+    files = [
+        'test_types_basic.dcf',
+        'test_types_char.dcf',
+        'test_types_complex.dcf',
+        'test_types_nested.dcf',
+        'test_types_rank.dcf',
+    ]
+    
+    print("DCF Component Serialization Analyzer")
+    print("=" * 60)
+    
+    for f in files:
+        if os.path.exists(f):
+            analyze_dcf_file(f)
+        else:
+            print(f"\n  {f}: not found (run create_test_types.apls first)")
+    
+    # Also analyze namespace files if they exist
+    for f in ['test_ns.dcf', 'test_ns_or.dcf']:
+        if os.path.exists(f):
+            analyze_dcf_file(f)
+    
+    print("\n\n=== Type Byte Summary ===")
+    print("Observed type bytes and their meanings:")
+    for tb, name in sorted(TYPE_NAMES.items()):
+        print(f"  0x{tb:02x} = {name}")
+
+
+if __name__ == '__main__':
+    main()

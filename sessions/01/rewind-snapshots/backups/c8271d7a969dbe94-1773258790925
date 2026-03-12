@@ -1,0 +1,264 @@
+"""
+Namespace serialization binary analyzer.
+Parses DUMP output from probe_ns_deep.apls, does differential analysis
+to map the internal structure of 220⌶ namespace serialization.
+"""
+import struct
+import sys
+import re
+
+def parse_dump_file(filename):
+    """Parse the probe output file into {name: bytes(...)} dict."""
+    dumps = {}
+    current_name = None
+    current_bytes = []
+    
+    with open(filename, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith('DUMP '):
+                parts = line.split()
+                current_name = parts[1]
+                current_bytes = []
+            elif line == 'ENDDUMP':
+                if current_name and current_bytes:
+                    dumps[current_name] = bytes(current_bytes)
+                current_name = None
+                current_bytes = []
+            elif current_name is not None and line:
+                # Parse decimal byte values
+                try:
+                    vals = [int(x) for x in line.split()]
+                    current_bytes.extend(vals)
+                except ValueError:
+                    pass
+    return dumps
+
+
+def hexdump(data, offset=0, width=32, highlight_ranges=None):
+    """Pretty hexdump with optional highlights."""
+    lines = []
+    for i in range(0, len(data), width):
+        chunk = data[i:i+width]
+        hex_str = ' '.join(f'{b:02x}' for b in chunk)
+        ascii_str = ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
+        lines.append(f'  +{offset+i:04x}: {hex_str:<{width*3}}  {ascii_str}')
+    return '\n'.join(lines)
+
+
+def find_utf16_strings(data, min_len=1):
+    """Find UTF-16LE encoded strings in the data."""
+    results = []
+    i = 0
+    while i < len(data) - 1:
+        # Look for printable chars in UTF-16LE (low byte is printable, high byte is 0)
+        start = i
+        chars = []
+        while i < len(data) - 1:
+            lo, hi = data[i], data[i+1]
+            if hi == 0 and 32 <= lo < 127:
+                chars.append(chr(lo))
+                i += 2
+            else:
+                break
+        if len(chars) >= min_len:
+            results.append((start, ''.join(chars)))
+            continue
+        i = start + 1
+    return results
+
+
+def find_type_codes(data):
+    """Find 220⌶ type_code patterns in the data."""
+    results = []
+    for i in range(0, len(data) - 7, 8):
+        lo = data[i]
+        hi = data[i+1]
+        # Check if rest of 8-byte word is zeros (typical for type_code)
+        if all(b == 0 for b in data[i+2:i+8]):
+            nibble = lo & 0x0F
+            if nibble in (0x0F, 0x07) and hi in (0x21, 0x22, 0x23, 0x24, 0x25, 0x06, 0x27, 0x28, 0x29, 0x2A, 0x2E):
+                rank = (lo >> 4) & 0xF
+                TYPE_NAMES = {0x21:'Bool', 0x22:'Int8', 0x23:'Int16', 0x24:'Int32',
+                              0x25:'Float64', 0x06:'Nested', 0x27:'Char8', 0x28:'Char16',
+                              0x29:'Char32', 0x2A:'Complex128', 0x2E:'Decimal128'}
+                kind = 'simple' if nibble == 0x0F else 'nested'
+                tname = TYPE_NAMES.get(hi, f'0x{hi:02x}')
+                results.append((i, f'type=0x{hi:02x}({tname}) rank={rank} kind={kind}'))
+    return results
+
+
+def diff_dumps(data1, data2, name1, name2):
+    """Show byte-level differences between two serializations."""
+    min_len = min(len(data1), len(data2))
+    max_len = max(len(data1), len(data2))
+    
+    print(f'\n{"="*70}')
+    print(f'DIFF: {name1} ({len(data1)} bytes) vs {name2} ({len(data2)} bytes)')
+    print(f'  Size difference: {len(data2) - len(data1):+d} bytes')
+    
+    # Find differing regions
+    diff_ranges = []
+    i = 0
+    while i < min_len:
+        if data1[i] != data2[i]:
+            start = i
+            while i < min_len and data1[i] != data2[i]:
+                i += 1
+            diff_ranges.append((start, i))
+        else:
+            i += 1
+    
+    if len(data2) > len(data1):
+        diff_ranges.append((len(data1), len(data2)))
+    
+    if not diff_ranges:
+        print('  IDENTICAL')
+        return
+    
+    print(f'  {len(diff_ranges)} differing region(s):')
+    for start, end in diff_ranges:
+        print(f'  +{start:04x}..+{end-1:04x} ({end-start} bytes)')
+        # Show context (8 bytes before and after)
+        ctx_start = max(0, start - 8) & ~7  # align to 8
+        ctx_end = min(max_len, end + 8)
+        print(f'    {name1}: {" ".join(f"{data1[j]:02x}" if j < len(data1) else "--" for j in range(ctx_start, min(ctx_end, len(data1))))}')
+        print(f'    {name2}: {" ".join(f"{data2[j]:02x}" if j < len(data2) else "--" for j in range(ctx_start, min(ctx_end, len(data2))))}')
+        
+        # Try to interpret the differing bytes
+        for j in range(start, min(end, min_len)):
+            if j < len(data1) and j < len(data2):
+                pass  # could add per-byte annotation
+
+
+def analyze_namespace(name, data):
+    """Analyze the structure of a single namespace serialization."""
+    print(f'\n{"="*70}')
+    print(f'ANALYSIS: {name} ({len(data)} bytes)')
+    print(f'{"="*70}')
+    
+    # Preamble (first 10 bytes — same as any 220⌶)
+    if len(data) < 10:
+        print('  TOO SHORT')
+        return
+    
+    magic = data[0:2]
+    size_words = struct.unpack_from('<I', data, 2)[0]
+    print(f'  Preamble: magic={magic[0]:02x} {magic[1]:02x}, size_words={size_words}')
+    
+    # Type/rank at offset 10 (8 bytes)
+    type_code = struct.unpack_from('<Q', data, 10)[0]
+    print(f'  Type code: 0x{type_code:016x} (should be 0x0000 for namespace)')
+    
+    # Field at offset 18
+    field_18 = struct.unpack_from('<Q', data, 18)[0]
+    print(f'  +0x12 (18): 0x{field_18:016x} = {field_18}')
+    
+    # Signature at offset 26
+    sig = data[26:34]
+    print(f'  +0x1a (26): {" ".join(f"{b:02x}" for b in sig)}')
+    
+    # Find all UTF-16 strings
+    strings = find_utf16_strings(data, min_len=1)
+    if strings:
+        print(f'\n  UTF-16LE strings found:')
+        for off, s in strings:
+            if len(s) <= 60:
+                print(f'    +{off:04x}: "{s}"')
+    
+    # Find all type codes
+    type_codes = find_type_codes(data)
+    if type_codes:
+        print(f'\n  Type codes found:')
+        for off, desc in type_codes:
+            # Also show the 8 bytes before (size_words) and after (element_count/value)
+            before = struct.unpack_from('<Q', data, off-8)[0] if off >= 8 else 0
+            after = struct.unpack_from('<Q', data, off+8)[0] if off+8 < len(data) else 0
+            print(f'    +{off:04x}: {desc}  (preceding_u64={before}, following_u64={after})')
+    
+    # Show raw hex dump of key regions
+    print(f'\n  Header region (+0x00..+0x3f):')
+    print(hexdump(data[0:min(64, len(data))]))
+    
+    # Find the character table (look for the big block of u32 values)
+    # The character table has sequential ASCII values
+    for i in range(0, len(data) - 103):
+        # Look for 'a' 'b' 'c' 'd' sequence in u32 LE
+        if (data[i:i+4] == b'\x61\x00\x00\x00' and 
+            data[i+4:i+8] == b'\x62\x00\x00\x00' and
+            data[i+8:i+12] == b'\x63\x00\x00\x00'):
+            print(f'\n  Character table starts near +{i:04x} (found "abc" in u32)')
+            # Scan back to find the table start
+            tbl_start = i
+            while tbl_start > 0 and not all(b == 0 for b in data[tbl_start-4:tbl_start]):
+                tbl_start -= 4
+            # Scan forward to find end
+            tbl_end = i
+            while tbl_end < len(data) - 4:
+                val = struct.unpack_from('<I', data, tbl_end)[0]
+                if val == 0 and struct.unpack_from('<I', data, tbl_end+4)[0] == 0:
+                    break
+                tbl_end += 4
+            print(f'  Character table: +{tbl_start:04x}..+{tbl_end:04x} ({(tbl_end-tbl_start)//4} entries, {tbl_end-tbl_start} bytes)')
+            break
+
+
+def main():
+    dumps = parse_dump_file('ns_probe_output.txt')
+    
+    print(f'Loaded {len(dumps)} namespace dumps:')
+    for name, data in sorted(dumps.items(), key=lambda x: len(x[1])):
+        print(f'  {name}: {len(data)} bytes')
+    
+    # Size analysis
+    print(f'\n{"="*70}')
+    print('SIZE ANALYSIS')
+    print(f'{"="*70}')
+    if 'EMPTY_NS' in dumps and 'NS_A1' in dumps:
+        e = len(dumps['EMPTY_NS'])
+        a1 = len(dumps['NS_A1'])
+        print(f'  Empty NS:       {e} bytes')
+        print(f'  1 member (a=1): {a1} bytes  (+{a1-e} per first member)')
+    if 'NS_A1' in dumps and 'NS_AB' in dumps:
+        print(f'  2 members:      {len(dumps["NS_AB"])} bytes  (+{len(dumps["NS_AB"])-len(dumps["NS_A1"])} per additional member)')
+    if 'NS_AB' in dumps and 'NS_ABC' in dumps:
+        print(f'  3 members:      {len(dumps["NS_ABC"])} bytes  (+{len(dumps["NS_ABC"])-len(dumps["NS_AB"])} per additional member)')
+    
+    # Name length effect
+    print(f'\n  Name length effect:')
+    for name_label in ['NS_A1', 'NS_AB1', 'NS_ABC1', 'NS_LONGNAME']:
+        if name_label in dumps:
+            print(f'    {name_label}: {len(dumps[name_label])} bytes')
+    
+    # Value type effect (all have member 'a' with different types)
+    print(f'\n  Value type effect:')
+    for name_label in ['NS_A1', 'NS_AFLOAT', 'NS_ASTR', 'NS_ANESTED']:
+        if name_label in dumps:
+            print(f'    {name_label}: {len(dumps[name_label])} bytes')
+    
+    # Detailed analysis of empty NS
+    if 'EMPTY_NS' in dumps:
+        analyze_namespace('EMPTY_NS', dumps['EMPTY_NS'])
+    
+    # Detailed analysis of NS with one member
+    if 'NS_A1' in dumps:
+        analyze_namespace('NS_A1', dumps['NS_A1'])
+    
+    # Key diffs
+    pairs = [
+        ('EMPTY_NS', 'NS_A1'),
+        ('NS_A1', 'NS_AB'),
+        ('NS_AB', 'NS_ABC'),
+        ('NS_A1', 'NS_AB1'),
+        ('NS_A1', 'NS_ABC1'),
+        ('NS_A1', 'NS_LONGNAME'),
+        ('NS_A1', 'NS_AFLOAT'),
+        ('NS_A1', 'NS_ASTR'),
+    ]
+    for n1, n2 in pairs:
+        if n1 in dumps and n2 in dumps:
+            diff_dumps(dumps[n1], dumps[n2], n1, n2)
+
+
+if __name__ == '__main__':
+    main()

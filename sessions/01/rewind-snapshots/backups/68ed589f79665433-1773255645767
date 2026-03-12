@@ -1,0 +1,132 @@
+﻿⎕IO←0
+
+⍝ === Deep Dive: Nested Array Serialization ===
+⍝ Explore how pointer arrays (⎕DR 326) are encoded in 220⌶
+
+⎕←'=== Nested Array Serialization Probe ==='
+⎕←''
+
+⍝ Helper
+fmt←{⍕256|⍵}
+
+⍝ --- Simple nested vectors ---
+⎕←'--- Simple nested vectors ---'
+s←1(220⌶)(1 2)(3 4)
+⎕←'(1 2)(3 4):        len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+s←1(220⌶)(1)(2)(3)
+⎕←'(1)(2)(3):         len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+s←1(220⌶)(,1)(,2)(,3)
+⎕←'(,1)(,2)(,3):      len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Mixed-type nested ---
+⎕←'--- Mixed-type nested ---'
+s←1(220⌶)('hello' 42)
+⎕←'(hello 42):        len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+s←1(220⌶)('abc' 1.5 (1 0 1))
+⎕←'(abc 1.5 bools):   len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+s←1(220⌶)(42 'x' 3.14)
+⎕←'(42 x 3.14):       len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Deep nesting ---
+⎕←'--- Deep nesting ---'
+s←1(220⌶)(1 (2 3))
+⎕←'(1 (2 3)):         len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+s←1(220⌶)(1 (2 (3 4)))
+⎕←'(1 (2 (3 4))):     len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+s←1(220⌶)(1 (2 (3 (4 5))))
+⎕←'4-deep:            len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Nested with empties ---
+⎕←'--- Nested with empty elements ---'
+s←1(220⌶)(⍬ 'hello')
+⎕←'(⍬ hello):         len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+s←1(220⌶)('' 42)
+⎕←'(empty_str 42):    len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+s←1(220⌶)(⍬ '' (0⍴0))
+⎕←'(⍬ empty empty):   len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Nested matrices ---
+⎕←'--- Nested matrices ---'
+s←1(220⌶)2 2⍴(1 2)(3 4)(5 6)(7 8)
+⎕←'Nested mat 2x2:    len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+s←1(220⌶)2 2⍴('ab')(1 2)('cd')(3 4)
+⎕←'Mixed nested mat:  len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Single-element nested (enclosed) ---
+⎕←'--- Enclosed scalars ---'
+s←1(220⌶)⊂1 2 3
+⎕←'⊂1 2 3:            len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+s←1(220⌶)⊂'hello'
+⎕←'⊂hello:            len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+s←1(220⌶)⊂⊂1 2 3
+⎕←'⊂⊂1 2 3:           len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Nested with varying inner types ---
+⎕←'--- Nested with all inner types ---'
+s←1(220⌶)((1 0 1) (10 20 30) (300 400) (100000 200000) (1.5 2.5) 'hello' '⍴⍳')
+⎕←'All-types nested:  len=',⍕≢s
+⎕←'  first80: ',fmt 80↑s
+⎕←'  last20:  ',fmt (¯20)↑s
+
+⎕←''
+⍝ --- Nested scalar (⊂ of scalar) ---
+⎕←'--- Scalar enclosures ---'
+s←1(220⌶)⊂42
+⎕←'⊂42:               len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+s←1(220⌶)⊂'A'
+⎕←'⊂A:                len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+s←1(220⌶)⊂3.14
+⎕←'⊂3.14:             len=',⍕≢s
+⎕←'  bytes: ',fmt s
+
+⎕←''
+⍝ --- Compare simple vs nested with same data ---
+⎕←'--- Simple vs nested comparison ---'
+⎕←'(helps identify nesting overhead)'
+s1←1(220⌶)1 2 3 4
+s2←1(220⌶)(1 2)(3 4)
+⎕←'Simple 1 2 3 4:    len=',⍕≢s1
+⎕←'  bytes: ',fmt s1
+⎕←'Nested (1 2)(3 4): len=',⍕≢s2
+⎕←'  bytes: ',fmt s2
+
+⎕←''
+⎕←'=== DONE ==='

@@ -1,0 +1,310 @@
+"""
+Deep analysis of namespace serialization structure.
+Reads the probe output and performs payload-aligned structural analysis.
+"""
+import struct
+import sys
+
+def parse_dump_file(filename):
+    dumps = {}
+    current_name = None
+    current_bytes = []
+    with open(filename, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith('DUMP '):
+                parts = line.split()
+                current_name = parts[1]
+                current_bytes = []
+            elif line == 'ENDDUMP':
+                if current_name and current_bytes:
+                    dumps[current_name] = bytes(current_bytes)
+                current_name = None
+            elif current_name is not None and line:
+                try:
+                    vals = [int(x) for x in line.split()]
+                    current_bytes.extend(vals)
+                except ValueError:
+                    pass
+    return dumps
+
+TYPE_NAMES = {
+    0x00:'NS', 0x06:'Nested', 0x14:'???0x14', 0x15:'???0x15', 0x1E:'???0x1E',
+    0x21:'Bool', 0x22:'Int8', 0x23:'Int16', 0x24:'Int32',
+    0x25:'Float64', 0x27:'Char8', 0x28:'Char16', 0x29:'Char32',
+    0x2A:'Complex128', 0x2E:'Decimal128'
+}
+
+def u64(data, off):
+    return struct.unpack_from('<Q', data, off)[0] if off+8 <= len(data) else 0
+
+def u32(data, off):
+    return struct.unpack_from('<I', data, off)[0] if off+4 <= len(data) else 0
+
+def u16(data, off):
+    return struct.unpack_from('<H', data, off)[0] if off+2 <= len(data) else 0
+
+def hexb(data, off, n):
+    return ' '.join(f'{data[off+i]:02x}' for i in range(min(n, len(data)-off)))
+
+def ascii_safe(data, off, n):
+    return ''.join(chr(data[off+i]) if 32 <= data[off+i] < 127 else '.' for i in range(min(n, len(data)-off)))
+
+def payload_dump(label, data, start=0, end=None, width=8):
+    """Dump payload with 8-byte aligned u64 annotations."""
+    if end is None:
+        end = len(data)
+    print(f'\n{label}:')
+    for off in range(start, min(end, len(data)), width):
+        chunk = data[off:off+width]
+        hexs = ' '.join(f'{b:02x}' for b in chunk)
+        val = u64(data, off) if off+8 <= len(data) else 0
+        asc = ascii_safe(data, off, width)
+        # Annotations
+        ann = ''
+        # Check for type_code pattern
+        if len(chunk) >= 8 and all(b == 0 for b in chunk[2:8]):
+            lo, hi = chunk[0], chunk[1]
+            nib = lo & 0x0F
+            if nib in (0x0F, 0x07) and hi in TYPE_NAMES:
+                rank = lo >> 4
+                kind = 'S' if nib == 0x0F else 'N'
+                ann = f'  <- TYPE {TYPE_NAMES[hi]} rank={rank} ({kind})'
+        # Check for UTF-16 strings
+        if len(chunk) >= 2 and 0x20 < chunk[0] < 0x7F and chunk[1] == 0:
+            chars = []
+            for i in range(0, min(8, len(chunk)), 2):
+                if chunk[i] > 0 and chunk[i+1] == 0:
+                    chars.append(chr(chunk[i]))
+                else:
+                    break
+            if chars:
+                ann = f'  <- UTF16: "{"".join(chars)}"'
+        print(f'  P+{off:04x}: {hexs:<24s}  {val:>16d}  {asc}{ann}')
+
+
+def analyze_one(name, raw):
+    """Full structural analysis of a namespace serialization."""
+    print(f'\n{"="*72}')
+    print(f'{name}: {len(raw)} bytes total')
+    print(f'{"="*72}')
+    
+    # Preamble
+    magic = raw[0:2]
+    sw = u32(raw, 2)
+    print(f'Preamble: magic=0x{magic[0]:02x}{magic[1]:02x}, size_words={sw}')
+    
+    # Payload starts at byte 10
+    P = raw[10:]
+    plen = len(P)
+    print(f'Payload: {plen} bytes (from byte 10)')
+    
+    # Type_code at P+0
+    tc = u64(P, 0)
+    print(f'P+0000: type_code = 0x{tc:016x}')
+    
+    # P+8: "element_count" equivalent
+    f8 = u64(P, 8)
+    print(f'P+0008: field_8 = {f8} (0x{f8:x})')
+    
+    # P+16: more header
+    print(f'P+0010: {hexb(P, 16, 8)}  (val={u64(P,16):#x})')
+    print(f'P+0018: {hexb(P, 24, 8)}  (val={u64(P,24):#x})')
+    
+    # Scan for interesting structures
+    # Find member names by looking for the 01 28 00 88 descriptor
+    print(f'\n--- Member name descriptors (01 28 00 88 pattern) ---')
+    name_locations = []
+    for i in range(0, plen-8, 2):
+        if P[i:i+4] == b'\x01\x28\x00\x88':
+            # Name follows in the next bytes (UTF-16LE)
+            desc_off = i
+            name_off = i + 8  # name starts 8 bytes after descriptor? Or immediately after 4-byte marker?
+            # Read UTF-16 chars
+            chars = []
+            j = i + 4  # right after the descriptor
+            while j < plen - 1:
+                lo, hi = P[j], P[j+1]
+                if hi == 0 and 0x20 < lo < 0x7F:
+                    chars.append(chr(lo))
+                    j += 2
+                else:
+                    break
+            mname = ''.join(chars) if chars else '(empty)'
+            name_locations.append((desc_off, mname))
+            # Context
+            ctx_start = max(0, desc_off - 16)
+            print(f'  P+{desc_off:04x}: descriptor, name="{mname}"')
+            print(f'    context: {hexb(P, ctx_start, 32)}')
+    
+    # Find serialized values by looking for type_code patterns
+    print(f'\n--- Serialized values (type_code patterns) ---')
+    value_locations = []
+    for i in range(0, plen-16, 8):
+        if i + 8 <= plen:
+            lo, hi = P[i], P[i+1]
+            nib = lo & 0x0F
+            if all(b == 0 for b in P[i+2:i+8]):
+                if nib in (0x0F, 0x07) and hi in (0x21, 0x22, 0x23, 0x24, 0x25, 0x06, 0x27, 0x28, 0x29, 0x2A, 0x2E):
+                    rank = lo >> 4
+                    tname = TYPE_NAMES.get(hi, f'0x{hi:02x}')
+                    kind = 'simple' if nib == 0x0F else 'nested'
+                    # Read following u64 (element count or value)
+                    following = u64(P, i+8) if i+16 <= plen else 0
+                    # Read preceding u64 (size_words)
+                    preceding = u64(P, i-8) if i >= 8 else 0
+                    value_locations.append((i, hi, rank, kind, preceding, following))
+                    print(f'  P+{i:04x}: type=0x{hi:02x}({tname}) rank={rank} kind={kind}')
+                    print(f'    preceding_u64={preceding}  following_u64={following}')
+                    # Show some data
+                    if hi == 0x22 and rank == 0:  # Int8 scalar
+                        val = following & 0xFF
+                        if val >= 128: val -= 256
+                        print(f'    → Int8 scalar value = {val}')
+                    elif hi == 0x25 and rank == 0:  # Float64 scalar
+                        val = struct.unpack_from('<d', P, i+8)[0]
+                        print(f'    → Float64 scalar value = {val}')
+                    elif hi == 0x27 and rank == 1:  # Char8 vector
+                        count = following
+                        if count < 100 and i+16+count <= plen:
+                            text = P[i+16:i+16+count].decode('ascii', errors='replace')
+                            print(f'    → Char8 vector[{count}] = "{text}"')
+                    elif hi == 0x22 and rank == 1:  # Int8 vector
+                        count = following
+                        if count < 50 and i+16+count <= plen:
+                            vals = list(P[i+16:i+16+count])
+                            vals = [v if v < 128 else v-256 for v in vals]
+                            print(f'    → Int8 vector[{count}] = {vals}')
+    
+    # Find the character table (a,b,c,d... in u32 LE)
+    print(f'\n--- Character/Symbol table ---')
+    for i in range(0, plen - 12, 4):
+        if (P[i:i+4] == b'\x61\x00\x00\x00' and 
+            P[i+4:i+8] == b'\x62\x00\x00\x00' and
+            P[i+8:i+12] == b'\x63\x00\x00\x00'):
+            # Found 'abc' in u32 LE - scan backwards for table start
+            tbl_start = i
+            while tbl_start >= 4:
+                val = u32(P, tbl_start - 4)
+                if val == 0:
+                    break
+                tbl_start -= 4
+            # Scan forward for table end
+            tbl_end = i
+            while tbl_end < plen - 4:
+                val = u32(P, tbl_end)
+                if val == 0 and u32(P, tbl_end + 4) == 0:
+                    break
+                tbl_end += 4
+            entries = (tbl_end - tbl_start) // 4
+            print(f'  P+{tbl_start:04x}..P+{tbl_end:04x}: {entries} entries ({tbl_end-tbl_start} bytes)')
+            # Show first 20 and last 10 entries
+            print(f'  First 20 entries:')
+            for j in range(min(20, entries)):
+                val = u32(P, tbl_start + j*4)
+                ch = chr(val) if val < 0x110000 and val > 0 else '?'
+                print(f'    [{j:3d}] 0x{val:04x} = {repr(ch)}')
+            if entries > 30:
+                print(f'  ...')
+                print(f'  Last 10 entries:')
+                for j in range(entries-10, entries):
+                    val = u32(P, tbl_start + j*4)
+                    ch = chr(val) if val < 0x110000 and val > 0 else '?'
+                    print(f'    [{j:3d}] 0x{val:04x} = {repr(ch)}')
+            break
+    
+    # Show the region between header and character table
+    if name_locations:
+        first_name = name_locations[0][0]
+    else:
+        first_name = plen
+    if value_locations:
+        first_val = value_locations[0][0]
+    else:
+        first_val = plen
+    
+    print(f'\n--- Full payload dump (first 300 bytes) ---')
+    payload_dump('Payload', P, 0, min(300, plen))
+    
+    return {'names': name_locations, 'values': value_locations}
+
+
+def diff_same_size(d1, d2, n1, n2):
+    """Focused diff for same-size serializations."""
+    P1 = d1[10:]  # payload
+    P2 = d2[10:]
+    min_len = min(len(P1), len(P2))
+    
+    print(f'\n{"="*72}')
+    print(f'PAYLOAD DIFF: {n1} vs {n2} (both {len(d1)} bytes)')
+    print(f'{"="*72}')
+    
+    diffs = []
+    i = 0
+    while i < min_len:
+        if P1[i] != P2[i]:
+            start = i
+            while i < min_len and P1[i] != P2[i]:
+                i += 1
+            diffs.append((start, i))
+        else:
+            i += 1
+    
+    if len(P2) > len(P1):
+        diffs.append((len(P1), len(P2)))
+    
+    print(f'  {len(diffs)} differing region(s)')
+    for start, end in diffs:
+        nbytes = end - start
+        # Align context to 8 bytes
+        ctx_s = max(0, (start - 8) & ~7)
+        ctx_e = min(max(len(P1), len(P2)), ((end + 15) & ~7))
+        print(f'\n  P+{start:04x}..P+{end-1:04x} ({nbytes} bytes changed):')
+        for off in range(ctx_s, ctx_e, 8):
+            c1 = P1[off:off+8] if off+8 <= len(P1) else b''
+            c2 = P2[off:off+8] if off+8 <= len(P2) else b''
+            h1 = ' '.join(f'{b:02x}' for b in c1).ljust(24)
+            h2 = ' '.join(f'{b:02x}' for b in c2).ljust(24)
+            marker = ' ***' if any(c1[j:j+1] != c2[j:j+1] for j in range(max(len(c1), len(c2)))) else ''
+            a1 = ''.join(chr(b) if 32<=b<127 else '.' for b in c1)
+            a2 = ''.join(chr(b) if 32<=b<127 else '.' for b in c2)
+            print(f'    P+{off:04x}: {h1}  {a1}')
+            print(f'    P+{off:04x}: {h2}  {a2}{marker}')
+
+
+def main():
+    dumps = parse_dump_file('ns_probe_output.txt')
+    
+    # Size summary
+    print('Namespace serialization sizes:')
+    for name, data in sorted(dumps.items(), key=lambda x: len(x[1])):
+        print(f'  {name:15s}: {len(data):5d} bytes  (payload: {len(data)-10} bytes)')
+    
+    # Analyze empty NS
+    analyze_one('EMPTY_NS', dumps['EMPTY_NS'])
+    
+    # Analyze NS with one member
+    analyze_one('NS_A1', dumps['NS_A1'])
+    
+    # Analyze NS with 5 mixed members
+    analyze_one('NS_5MIXED', dumps['NS_5MIXED'])
+    
+    # Critical same-size diffs
+    print(f'\n\n{"#"*72}')
+    print('# SAME-SIZE DIFFS (most informative)')
+    print(f'{"#"*72}')
+    
+    pairs = [
+        ('NS_A1', 'NS_AB1', 'name a vs ab (length effect)'),
+        ('NS_A1', 'NS_ABC1', 'name a vs abc (length effect)'),
+        ('NS_A1', 'NS_X42', 'name a vs x, value 1 vs 42'),
+        ('NS_A1', 'NS_AFLOAT', 'Int8(1) vs Float64(1.5)'),
+    ]
+    for n1, n2, desc in pairs:
+        if n1 in dumps and n2 in dumps:
+            print(f'\n  [{desc}]')
+            diff_same_size(dumps[n1], dumps[n2], n1, n2)
+
+
+if __name__ == '__main__':
+    main()

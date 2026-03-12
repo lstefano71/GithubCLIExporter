@@ -1,0 +1,232 @@
+﻿⎕IO←0
+
+⍝ === Create DCF files containing all data types ===
+⍝ J=0, C=1, Z=0 for clearest binary analysis
+
+base←'D:\_Utenti\stf.APLITA\Source\Repos\DCFFiles\'
+
+⍝ Helper to create a fresh file
+∇ tn←CreateDCF name;file
+  file←base,name
+  :Trap 0
+    ⎕FERASE file ⎕FTIE 0
+  :Else
+  :EndTrap
+  tn←file ⎕FCREATE 0
+  ⎕FPROPS tn 'J' 0
+  ⎕FPROPS tn 'C' 1
+  ⎕FPROPS tn 'Z' 0
+∇
+
+⍝ === File 1: Basic numeric types ===
+⎕←'Creating test_types_basic.dcf...'
+tn←CreateDCF 'test_types_basic.dcf'
+
+⍝ Comp 1: Bool scalar 0
+0 ⎕FAPPEND tn
+⍝ Comp 2: Bool scalar 1
+1 ⎕FAPPEND tn
+⍝ Comp 3: Bool vector
+(1 0 1 0 1 1 0 0) ⎕FAPPEND tn
+⍝ Comp 4: Bool matrix
+(2 4⍴1 0 1 0 0 1 0 1) ⎕FAPPEND tn
+⍝ Comp 5: Int8 scalar 42
+42 ⎕FAPPEND tn
+⍝ Comp 6: Int8 vector
+(10 20 30 40 50) ⎕FAPPEND tn
+⍝ Comp 7: Int8 matrix
+(2 3⍴10 20 30 40 50 60) ⎕FAPPEND tn
+⍝ Comp 8: Int16 scalar 300
+300 ⎕FAPPEND tn
+⍝ Comp 9: Int16 vector
+(300 400 500 600 700) ⎕FAPPEND tn
+⍝ Comp 10: Int16 matrix
+(2 3⍴300 400 500 600 700 800) ⎕FAPPEND tn
+⍝ Comp 11: Int32 scalar 100000
+100000 ⎕FAPPEND tn
+⍝ Comp 12: Int32 vector
+(100000 200000 300000) ⎕FAPPEND tn
+⍝ Comp 13: Int32 matrix
+(2 3⍴100000 200000 300000 400000 500000 600000) ⎕FAPPEND tn
+⍝ Comp 14: Float64 scalar
+3.14 ⎕FAPPEND tn
+⍝ Comp 15: Float64 vector
+(1.5 2.5 3.5 4.5 5.5) ⎕FAPPEND tn
+⍝ Comp 16: Float64 matrix
+(2 3⍴1.1 2.2 3.3 4.4 5.5 6.6) ⎕FAPPEND tn
+⍝ Comp 17: Scalar 0 (bool)
+0 ⎕FAPPEND tn
+⍝ Comp 18: Scalar 127 (int8 boundary)
+127 ⎕FAPPEND tn
+⍝ Comp 19: Scalar 128 (int16 boundary)
+128 ⎕FAPPEND tn
+⍝ Comp 20: Scalar 32767 (int16 max)
+32767 ⎕FAPPEND tn
+⍝ Comp 21: Scalar 32768 (int32 boundary)
+32768 ⎕FAPPEND tn
+⍝ Comp 22: Scalar ¯1
+(¯1) ⎕FAPPEND tn
+⍝ Comp 23: Scalar ¯128 (int8 min)
+(¯128) ⎕FAPPEND tn
+⍝ Comp 24: Scalar ¯129 (int16 boundary)
+(¯129) ⎕FAPPEND tn
+⍝ Comp 25: Empty numeric
+⍬ ⎕FAPPEND tn
+
+⎕FUNTIE tn
+⎕←'  25 components written'
+
+⍝ === File 2: Character types ===
+⎕←'Creating test_types_char.dcf...'
+tn←CreateDCF 'test_types_char.dcf'
+
+⍝ Comp 1: Char8 scalar
+'A' ⎕FAPPEND tn
+⍝ Comp 2: Char8 short vector
+'hello' ⎕FAPPEND tn
+⍝ Comp 3: Char8 longer vector
+'The quick brown fox' ⎕FAPPEND tn
+⍝ Comp 4: Char8 matrix
+(2 3⍴'abcdef') ⎕FAPPEND tn
+⍝ Comp 5: Char16 scalar (APL symbol)
+'⍴' ⎕FAPPEND tn
+⍝ Comp 6: Char16 vector
+'⍴⍳∊⌈⌊' ⎕FAPPEND tn
+⍝ Comp 7: Char16 matrix
+(2 3⍴'⍴⍳∊⌈⌊⍕') ⎕FAPPEND tn
+⍝ Comp 8: Empty char
+'' ⎕FAPPEND tn
+⍝ Comp 9: Single char vector (1-element)
+(,'X') ⎕FAPPEND tn
+
+⍝ Comp 10: Char32 - try high Unicode
+:Trap 0
+  (⎕UCS 128512) ⎕FAPPEND tn
+  ⎕←'  Char32 scalar written'
+:Else
+  ⎕←'  Char32 scalar FAILED, writing placeholder'
+  'CHAR32_FAILED' ⎕FAPPEND tn
+:EndTrap
+
+⍝ Comp 11: Char32 vector
+:Trap 0
+  (⎕UCS 128512 128513 128514) ⎕FAPPEND tn
+  ⎕←'  Char32 vector written'
+:Else
+  ⎕←'  Char32 vector FAILED, writing placeholder'
+  'CHAR32V_FAILED' ⎕FAPPEND tn
+:EndTrap
+
+⎕FUNTIE tn
+⎕←'  11 components written'
+
+⍝ === File 3: Complex and special types ===
+⎕←'Creating test_types_complex.dcf...'
+tn←CreateDCF 'test_types_complex.dcf'
+
+⍝ Comp 1: Complex scalar
+:Trap 0
+  1J2 ⎕FAPPEND tn
+  ⎕←'  Complex scalar written'
+:Else
+  ⎕←'  Complex scalar FAILED: ',⍕⎕DM
+  0 ⎕FAPPEND tn
+:EndTrap
+
+⍝ Comp 2: Complex vector
+:Trap 0
+  (1J2 3J4 5J6) ⎕FAPPEND tn
+  ⎕←'  Complex vector written'
+:Else
+  ⎕←'  Complex vector FAILED: ',⍕⎕DM
+  0 ⎕FAPPEND tn
+:EndTrap
+
+⍝ Comp 3: Complex matrix
+:Trap 0
+  (2 2⍴1J2 3J4 5J6 7J8) ⎕FAPPEND tn
+  ⎕←'  Complex matrix written'
+:Else
+  ⎕←'  Complex matrix FAILED: ',⍕⎕DM
+  0 ⎕FAPPEND tn
+:EndTrap
+
+⍝ Comp 4: Decimal128 scalar
+savefr←⎕FR
+:Trap 0
+  ⎕FR←1287
+  1.5 ⎕FAPPEND tn
+  ⎕←'  Decimal128 scalar written'
+  ⎕FR←savefr
+:Else
+  ⎕←'  Decimal128 scalar FAILED: ',⍕⎕DM
+  ⎕FR←savefr
+  0 ⎕FAPPEND tn
+:EndTrap
+
+⍝ Comp 5: Decimal128 vector
+:Trap 0
+  ⎕FR←1287
+  (1.5 2.5 3.5) ⎕FAPPEND tn
+  ⎕←'  Decimal128 vector written'
+  ⎕FR←savefr
+:Else
+  ⎕←'  Decimal128 vector FAILED: ',⍕⎕DM
+  ⎕FR←savefr
+  0 ⎕FAPPEND tn
+:EndTrap
+
+⎕FUNTIE tn
+⎕←'  5 components written'
+
+⍝ === File 4: Nested arrays ===
+⎕←'Creating test_types_nested.dcf...'
+tn←CreateDCF 'test_types_nested.dcf'
+
+⍝ Comp 1: Simple nested
+((1 2)(3 4)) ⎕FAPPEND tn
+⍝ Comp 2: Mixed-type nested
+(('hello' 42)) ⎕FAPPEND tn
+⍝ Comp 3: Deep nested
+((1 (2 (3 4)))) ⎕FAPPEND tn
+⍝ Comp 4: Nested with all inner types
+(((1 0 1) (10 20 30) (300 400) (100000) (1.5 2.5) 'hello' '⍴⍳')) ⎕FAPPEND tn
+⍝ Comp 5: Enclosed scalar
+(⊂1 2 3) ⎕FAPPEND tn
+⍝ Comp 6: Enclosed string
+(⊂'hello') ⎕FAPPEND tn
+⍝ Comp 7: Nested with empties
+((⍬ '' (0⍴0))) ⎕FAPPEND tn
+⍝ Comp 8: Nested matrix
+(2 2⍴(1 2)(3 4)(5 6)(7 8)) ⎕FAPPEND tn
+
+⎕FUNTIE tn
+⎕←'  8 components written'
+
+⍝ === File 5: Higher-rank arrays ===
+⎕←'Creating test_types_rank.dcf...'
+tn←CreateDCF 'test_types_rank.dcf'
+
+⍝ Comp 1: Vector (rank 1)
+(⍳5) ⎕FAPPEND tn
+⍝ Comp 2: Matrix 1x5 (rank 2)
+(1 5⍴⍳5) ⎕FAPPEND tn
+⍝ Comp 3: Matrix 5x1 (rank 2)
+(5 1⍴⍳5) ⎕FAPPEND tn
+⍝ Comp 4: Matrix 2x3 (rank 2)
+(2 3⍴⍳6) ⎕FAPPEND tn
+⍝ Comp 5: Rank-3 (2x3x2)
+(2 3 2⍴⍳12) ⎕FAPPEND tn
+⍝ Comp 6: Rank-4 (2x2x2x2)
+(2 2 2 2⍴⍳16) ⎕FAPPEND tn
+⍝ Comp 7: Rank-3 float
+(2 3 2⍴1.1 2.2 3.3 4.4 5.5 6.6 7.7 8.8 9.9 10.1 11.1 12.2) ⎕FAPPEND tn
+⍝ Comp 8: Rank-3 char
+(2 3 4⍴'ABCDEFGHIJKLMNOPQRSTUVWX') ⎕FAPPEND tn
+
+⎕FUNTIE tn
+⎕←'  8 components written'
+
+⎕←''
+⎕←'All test files created successfully'
+⎕←'Files: test_types_basic.dcf, test_types_char.dcf, test_types_complex.dcf, test_types_nested.dcf, test_types_rank.dcf'

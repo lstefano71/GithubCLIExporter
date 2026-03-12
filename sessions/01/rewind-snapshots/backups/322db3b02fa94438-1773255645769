@@ -1,0 +1,196 @@
+﻿⎕IO←0
+
+⍝ === Namespace Serialization Experiments ===
+⍝ Test whether 220⌶ can serialize namespaces, and explore alternatives
+
+⎕←'=== Namespace Serialization Probe ==='
+⎕←''
+
+⍝ --- Test 1: Empty namespace ---
+⎕←'--- Test 1: Empty namespace ---'
+ns1←⎕NS ''
+⎕←'Empty NS type:    ⎕DR=',⍕⎕DR ns1
+⎕←'Empty NS ⎕NC:     ',⍕⎕NC 'ns1'
+:Trap 0
+  s←1(220⌶)ns1
+  ⎕←'220⌶ empty NS:    len=',⍕≢s
+  ⎕←'  bytes: ',⍕256|s
+:Else
+  ⎕←'220⌶ empty NS:    FAILED - ',⍕⎕DM
+:EndTrap
+
+⎕←''
+⍝ --- Test 2: Namespace with simple members ---
+⎕←'--- Test 2: NS with simple members ---'
+ns2←⎕NS ''
+ns2.x←42
+ns2.name←'hello'
+ns2.vec←1 2 3
+⎕←'NS2 members: x=42, name=hello, vec=1 2 3'
+⎕←'NS2 ⎕DR:          ',⍕⎕DR ns2
+:Trap 0
+  s←1(220⌶)ns2
+  ⎕←'220⌶ NS2:         len=',⍕≢s
+  ⎕←'  first60: ',⍕256|60↑s
+  ⎕←'  last20:  ',⍕256|(¯20)↑s
+:Else
+  ⎕←'220⌶ NS2:         FAILED - ',⍕⎕DM
+:EndTrap
+
+⎕←''
+⍝ --- Test 3: ⎕OR of namespace ---
+⎕←'--- Test 3: ⎕OR of namespace ---'
+:Trap 0
+  or2←⎕OR ns2
+  ⎕←'⎕OR NS2 type:     ⎕DR=',⍕⎕DR or2
+  ⎕←'⎕OR NS2 shape:    ',⍕⍴or2
+  s←1(220⌶)or2
+  ⎕←'220⌶ ⎕OR NS2:     len=',⍕≢s
+  ⎕←'  first60: ',⍕256|60↑s
+  ⎕←'  last20:  ',⍕256|(¯20)↑s
+:Else
+  ⎕←'⎕OR NS2:          FAILED - ',⍕⎕DM
+:EndTrap
+
+⎕←''
+⍝ --- Test 4: Nested namespace ---
+⎕←'--- Test 4: Nested namespace ---'
+ns3←⎕NS ''
+ns3.outer←'top'
+ns3.inner←⎕NS ''
+ns3.inner.val←99
+ns3.inner.txt←'nested'
+⎕←'NS3: outer=top, inner.val=99, inner.txt=nested'
+:Trap 0
+  s←1(220⌶)ns3
+  ⎕←'220⌶ nested NS:   len=',⍕≢s
+  ⎕←'  first60: ',⍕256|60↑s
+:Else
+  ⎕←'220⌶ nested NS:   FAILED - ',⍕⎕DM
+:EndTrap
+:Trap 0
+  or3←⎕OR ns3
+  s←1(220⌶)or3
+  ⎕←'220⌶ ⎕OR nested:  len=',⍕≢s
+  ⎕←'  first60: ',⍕256|60↑s
+:Else
+  ⎕←'⎕OR nested NS:    FAILED - ',⍕⎕DM
+:EndTrap
+
+⎕←''
+⍝ --- Test 5: NS with various member types ---
+⎕←'--- Test 5: NS with various member types ---'
+ns4←⎕NS ''
+ns4.bool←1 0 1
+ns4.int8←42
+ns4.int16←300
+ns4.int32←100000
+ns4.float←3.14
+ns4.char←'hello'
+ns4.unicode←'⍴⍳∊'
+ns4.nested←('a' 1)('b' 2)
+ns4.matrix←2 3⍴⍳6
+⎕←'NS4: diverse member types'
+:Trap 0
+  s←1(220⌶)ns4
+  ⎕←'220⌶ diverse NS:  len=',⍕≢s
+  ⎕←'  first80: ',⍕256|80↑s
+:Else
+  ⎕←'220⌶ diverse NS:  FAILED - ',⍕⎕DM
+:EndTrap
+:Trap 0
+  or4←⎕OR ns4
+  s←1(220⌶)or4
+  ⎕←'220⌶ ⎕OR diverse: len=',⍕≢s
+  ⎕←'  first80: ',⍕256|80↑s
+:Else
+  ⎕←'⎕OR diverse NS:   FAILED - ',⍕⎕DM
+:EndTrap
+
+⎕←''
+⍝ --- Test 6: Write NS to DCF file ---
+⎕←'--- Test 6: Write NS to DCF ---'
+file←'D:\_Utenti\stf.APLITA\Source\Repos\DCFFiles\test_ns.dcf'
+:Trap 0
+  ⎕FERASE file ⎕FTIE 0
+:Else
+:EndTrap
+
+nsw←⎕NS ''
+nsw.x←42
+nsw.name←'hello'
+nsw.vec←⍳10
+⎕←'Writing NS to DCF...'
+:Trap 0
+  tn←file ⎕FCREATE 0
+  ⎕FPROPS tn 'J' 0
+  ⎕FPROPS tn 'C' 1
+  ⎕FPROPS tn 'Z' 0
+  nsw ⎕FAPPEND tn
+  ⎕←'NS FAPPEND:       OK (comp 1)'
+  ⍝ Read it back
+  rd←⎕FREAD tn 1
+  ⎕←'FREAD NS back:    ⎕DR=',⍕⎕DR rd
+  ⎕←'FREAD NS type:    ⎕NC=',⍕⎕NC 'rd'
+  :Trap 0
+    ⎕←'FREAD NS rd.x:    ',⍕rd.x
+    ⎕←'FREAD NS rd.name: ',rd.name
+    ⎕←'FREAD NS rd.vec:  ',⍕rd.vec
+  :Else
+    ⎕←'Cannot access NS members: ',⍕⎕DM
+  :EndTrap
+  ⎕FUNTIE tn
+:Else
+  ⎕←'NS to DCF:        FAILED - ',⍕⎕DM
+:EndTrap
+
+⎕←''
+⍝ --- Test 7: Write ⎕OR of NS to DCF ---
+⎕←'--- Test 7: Write ⎕OR to DCF ---'
+file2←'D:\_Utenti\stf.APLITA\Source\Repos\DCFFiles\test_ns_or.dcf'
+:Trap 0
+  ⎕FERASE file2 ⎕FTIE 0
+:Else
+:EndTrap
+:Trap 0
+  tn←file2 ⎕FCREATE 0
+  ⎕FPROPS tn 'J' 0
+  ⎕FPROPS tn 'C' 1
+  ⎕FPROPS tn 'Z' 0
+  (⎕OR nsw) ⎕FAPPEND tn
+  ⎕←'⎕OR FAPPEND:      OK (comp 1)'
+  rd←⎕FREAD tn 1
+  ⎕←'FREAD ⎕OR back:   ⎕DR=',⍕⎕DR rd
+  ⎕FUNTIE tn
+:Else
+  ⎕←'⎕OR to DCF:       FAILED - ',⍕⎕DM
+:EndTrap
+
+⎕←''
+⍝ --- Test 8: NS with function ---
+⎕←'--- Test 8: NS with function ---'
+ns5←⎕NS ''
+ns5.val←100
+:Trap 0
+  ns5.⎕FX 'r←double x' 'r←2×x'
+  ⎕←'NS5 with fn:      double defined'
+  :Trap 0
+    s←1(220⌶)ns5
+    ⎕←'220⌶ NS+fn:       len=',⍕≢s
+  :Else
+    ⎕←'220⌶ NS+fn:       FAILED - ',⍕⎕DM
+  :EndTrap
+  :Trap 0
+    or5←⎕OR ns5
+    s←1(220⌶)or5
+    ⎕←'220⌶ ⎕OR NS+fn:   len=',⍕≢s
+    ⎕←'  first60: ',⍕256|60↑s
+  :Else
+    ⎕←'⎕OR NS+fn:        FAILED - ',⍕⎕DM
+  :EndTrap
+:Else
+  ⎕←'⎕FX in NS:        FAILED - ',⍕⎕DM
+:EndTrap
+
+⎕←''
+⎕←'=== DONE ==='

@@ -1,0 +1,193 @@
+﻿⍝ Deep namespace serialization probe
+⍝ Creates multiple NS variants and dumps ALL serialized bytes as decimal values.
+⍝ Output parsed by analyze_ns.py for differential binary analysis.
+⍝ NOTE: dyascript doesn't support nabla function definitions.
+
+⎕←'=== Namespace Deep Serialization Probe ==='
+⎕←''
+
+⍝ ================================================================
+⎕←'--- Test 1: Empty namespace ---'
+ns1←⎕NS ''
+s←1(220⌶)ns1
+⎕←'DUMP EMPTY_NS ',⍕≢s
+⎕←⍕256|s
+⎕←'ENDDUMP'
+⎕←''
+
+⍝ ================================================================
+⎕←'--- Test 2: NS with a←1 ---'
+ns2←⎕NS ''
+ns2.a←1
+s←1(220⌶)ns2
+⎕←'DUMP NS_A1 ',⍕≢s
+⎕←⍕256|s
+⎕←'ENDDUMP'
+⎕←''
+
+⍝ ================================================================
+⎕←'--- Test 3: NS with a←1 b←2 ---'
+ns3←⎕NS ''
+ns3.a←1
+ns3.b←2
+s←1(220⌶)ns3
+⎕←'DUMP NS_AB ',⍕≢s
+⎕←⍕256|s
+⎕←'ENDDUMP'
+⎕←''
+
+⍝ ================================================================
+⎕←'--- Test 4: NS with a←1 b←2 c←3 ---'
+ns4←⎕NS ''
+ns4.a←1
+ns4.b←2
+ns4.c←3
+s←1(220⌶)ns4
+⎕←'DUMP NS_ABC ',⍕≢s
+⎕←⍕256|s
+⎕←'ENDDUMP'
+⎕←''
+
+⍝ ================================================================
+⎕←'--- Test 5: NS with longname←1 ---'
+ns5←⎕NS ''
+ns5.longname←1
+s←1(220⌶)ns5
+⎕←'DUMP NS_LONGNAME ',⍕≢s
+⎕←⍕256|s
+⎕←'ENDDUMP'
+⎕←''
+
+⍝ ================================================================
+⎕←'--- Test 6: NS with a←1.5 (float) ---'
+ns6←⎕NS ''
+ns6.a←1.5
+s←1(220⌶)ns6
+⎕←'DUMP NS_AFLOAT ',⍕≢s
+⎕←⍕256|s
+⎕←'ENDDUMP'
+⎕←''
+
+⍝ ================================================================
+⎕←'--- Test 7: NS with a←''hello'' (string) ---'
+ns7←⎕NS ''
+ns7.a←'hello'
+s←1(220⌶)ns7
+⎕←'DUMP NS_ASTR ',⍕≢s
+⎕←⍕256|s
+⎕←'ENDDUMP'
+⎕←''
+
+⍝ ================================================================
+⎕←'--- Test 8: NS with a←(1 2)(3 4) (nested) ---'
+ns8←⎕NS ''
+ns8.a←(1 2)(3 4)
+s←1(220⌶)ns8
+⎕←'DUMP NS_ANESTED ',⍕≢s
+⎕←⍕256|s
+⎕←'ENDDUMP'
+⎕←''
+
+⍝ ================================================================
+⎕←'--- Test 9: NS with sub-namespace child.x←99 ---'
+ns9←⎕NS ''
+ns9.child←⎕NS ''
+ns9.child.x←99
+s←1(220⌶)ns9
+⎕←'DUMP NS_CHILD ',⍕≢s
+⎕←⍕256|s
+⎕←'ENDDUMP'
+⎕←''
+
+⍝ ================================================================
+⎕←'--- Test 10: NS with 5 mixed members ---'
+ns10←⎕NS ''
+ns10.i←42
+ns10.f←3.14
+ns10.s←'hello'
+ns10.v←1 2 3
+ns10.b←1 0 1
+s←1(220⌶)ns10
+⎕←'DUMP NS_5MIXED ',⍕≢s
+⎕←⍕256|s
+⎕←'ENDDUMP'
+⎕←''
+
+⍝ ================================================================
+⎕←'--- Test 11: NS with x←42 ---'
+ns11←⎕NS ''
+ns11.x←42
+s←1(220⌶)ns11
+⎕←'DUMP NS_X42 ',⍕≢s
+⎕←⍕256|s
+⎕←'ENDDUMP'
+⎕←''
+
+⍝ ================================================================
+⎕←'--- Test 12: NS with ab←1 (2-char name) ---'
+ns12←⎕NS ''
+ns12.ab←1
+s←1(220⌶)ns12
+⎕←'DUMP NS_AB1 ',⍕≢s
+⎕←⍕256|s
+⎕←'ENDDUMP'
+⎕←''
+
+⍝ ================================================================
+⎕←'--- Test 13: NS with abc←1 (3-char name) ---'
+ns13←⎕NS ''
+ns13.abc←1
+s←1(220⌶)ns13
+⎕←'DUMP NS_ABC1 ',⍕≢s
+⎕←⍕256|s
+⎕←'ENDDUMP'
+⎕←''
+
+⍝ ================================================================
+⍝ Write ALL variants to DCF
+⎕←'--- Writing all variants to DCF ---'
+file←'test_ns_variants.dcf'
+:Trap 0
+  ⎕NDELETE file
+:Else
+:EndTrap
+:Trap 0
+  tn←file ⎕FCREATE 0 ⍠('J' 0)('C' 1)('Z' 0)
+  ns1 ⎕FAPPEND tn
+  ns2 ⎕FAPPEND tn
+  ns3 ⎕FAPPEND tn
+  ns4 ⎕FAPPEND tn
+  ns5 ⎕FAPPEND tn
+  ns6 ⎕FAPPEND tn
+  ns7 ⎕FAPPEND tn
+  ns8 ⎕FAPPEND tn
+  ns9 ⎕FAPPEND tn
+  ns10 ⎕FAPPEND tn
+  ns11 ⎕FAPPEND tn
+  ns12 ⎕FAPPEND tn
+  ns13 ⎕FAPPEND tn
+  ⎕FUNTIE tn
+  ⎕←'Written 13 components to ',file
+:Else
+  ⎕←'DCF ERROR: ',⎕DMX.Message
+:EndTrap
+
+⍝ Size summary
+⎕←''
+⎕←'--- Size summary ---'
+⎕←'  EMPTY_NS:    ',⍕≢1(220⌶)ns1
+⎕←'  NS_A1:       ',⍕≢1(220⌶)ns2
+⎕←'  NS_AB:       ',⍕≢1(220⌶)ns3
+⎕←'  NS_ABC:      ',⍕≢1(220⌶)ns4
+⎕←'  NS_LONGNAME: ',⍕≢1(220⌶)ns5
+⎕←'  NS_AFLOAT:   ',⍕≢1(220⌶)ns6
+⎕←'  NS_ASTR:     ',⍕≢1(220⌶)ns7
+⎕←'  NS_ANESTED:  ',⍕≢1(220⌶)ns8
+⎕←'  NS_CHILD:    ',⍕≢1(220⌶)ns9
+⎕←'  NS_5MIXED:   ',⍕≢1(220⌶)ns10
+⎕←'  NS_X42:      ',⍕≢1(220⌶)ns11
+⎕←'  NS_AB1:      ',⍕≢1(220⌶)ns12
+⎕←'  NS_ABC1:     ',⍕≢1(220⌶)ns13
+
+⎕←''
+⎕←'=== Done ==='

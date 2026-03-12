@@ -8,12 +8,24 @@ import re
 from io import StringIO
 from typing import Any
 
+import markdown as md_lib
+
 from .models import (
     ConversationTurn,
     ParsedSession,
     SubAgentRun,
     ToolCall,
 )
+
+
+def _md_to_html(text: str) -> str:
+    """Convert Markdown text to HTML using the markdown library."""
+    if not text.strip():
+        return ""
+    return md_lib.markdown(
+        text,
+        extensions=["fenced_code", "tables", "nl2br"],
+    )
 
 # ---------------------------------------------------------------------------
 # CSS
@@ -38,7 +50,7 @@ body {
   background: var(--bg); color: var(--fg); margin: 0; padding: 0;
   line-height: 1.6; font-size: 15px;
 }
-.container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+.container { margin: 0 auto; padding: 2rem 4rem; }
 h1 { font-size: 1.8rem; border-bottom: 2px solid var(--accent); padding-bottom: 0.5rem; margin-top: 0; }
 h2 { font-size: 1.4rem; color: var(--accent); margin-top: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
 h3 { font-size: 1.1rem; margin-top: 1.5rem; }
@@ -57,7 +69,20 @@ th { background: var(--bg2); font-weight: 600; }
 .turn-user { background: var(--user-bg); border-left: 4px solid var(--accent); }
 .turn-assistant { background: var(--assistant-bg); border-left: 4px solid var(--accent2); }
 .turn-header { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.5rem; opacity: 0.8; }
-.turn-content { white-space: pre-wrap; word-wrap: break-word; }
+.turn-content { word-wrap: break-word; }
+.turn-content h1, .turn-content h2, .turn-content h3,
+.turn-content h4, .turn-content h5, .turn-content h6 {
+  color: var(--fg); border: none; margin-top: 1rem; margin-bottom: 0.5rem;
+}
+.turn-content h1 { font-size: 1.3rem; }
+.turn-content h2 { font-size: 1.15rem; }
+.turn-content h3 { font-size: 1.05rem; }
+.turn-content ul, .turn-content ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+.turn-content blockquote {
+  border-left: 3px solid var(--accent); margin: 0.5rem 0; padding: 0.25rem 1rem;
+  background: var(--bg2); border-radius: 0 6px 6px 0;
+}
+.turn-content p { margin: 0.4rem 0; }
 details { margin: 0.75rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 details > summary {
   padding: 0.6rem 1rem; background: var(--summary-bg); cursor: pointer;
@@ -93,6 +118,9 @@ details > .detail-content { padding: 0.75rem 1rem; }
   .container { padding: 1rem; }
   h1 { font-size: 1.4rem; }
   pre { font-size: 0.8em; }
+}
+@media (min-width: 641px) and (max-width: 1024px) {
+  .container { padding: 2rem 2rem; }
 }
 """
 
@@ -192,7 +220,7 @@ def _html_plan(w, session: ParsedSession) -> None:
     if not session.plan:
         return
     w("<h2 id=\"plan\">Session Plan</h2>\n")
-    w(f"<pre><code>{_esc(session.plan.strip())}</code></pre>\n")
+    w(f"<div class=\"turn-content\">{_md_to_html(session.plan.strip())}</div>\n")
 
 
 def _html_todos(w, session: ParsedSession) -> None:
@@ -225,7 +253,7 @@ def _html_user_turn(w, turn: ConversationTurn, idx: int) -> None:
     ts = _fmt_ts(turn.timestamp)
     w(f"<div class=\"turn turn-user\" id=\"turn-{idx}\">\n")
     w(f"<div class=\"turn-header\">👤 User {ts}</div>\n")
-    w(f"<div class=\"turn-content\">{_esc(turn.content.strip())}</div>\n")
+    w(f"<div class=\"turn-content\">{_md_to_html(turn.content.strip())}</div>\n")
     w("</div>\n")
 
 
@@ -240,7 +268,7 @@ def _html_assistant_turn(w, turn: ConversationTurn, idx: int) -> None:
         w("</details>\n")
 
     if turn.content:
-        w(f"<div class=\"turn-content\">{_esc(turn.content.strip())}</div>\n")
+        w(f"<div class=\"turn-content\">{_md_to_html(turn.content.strip())}</div>\n")
 
     for tc in turn.tool_calls:
         _html_tool_call(w, tc)
@@ -343,7 +371,7 @@ def _html_checkpoints(w, session: ParsedSession) -> None:
         w(f"<h3>Checkpoint {cp.index}: {_esc(cp.title)}</h3>\n")
         if cp.content:
             w("<details>\n<summary>View checkpoint content</summary>\n")
-            w(f"<div class=\"detail-content\"><pre>{_esc(cp.content.strip())}</pre></div>\n")
+            w(f"<div class=\"detail-content turn-content\">{_md_to_html(cp.content.strip())}</div>\n")
             w("</details>\n")
 
 

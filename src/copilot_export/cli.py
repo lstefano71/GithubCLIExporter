@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -136,7 +137,10 @@ def _cmd_export(args: argparse.Namespace, sessions_dir: Path) -> int:
     fmt = args.format
     output_base = args.output
     if not output_base:
-        output_base = str(session_path / "export")
+        slug = _slugify(session.workspace.summary or session.workspace.id or "session")
+        exports_dir = Path("./exports")
+        exports_dir.mkdir(parents=True, exist_ok=True)
+        output_base = str(exports_dir / slug)
 
     if fmt in ("md", "both"):
         md_path = output_base + ".md"
@@ -193,3 +197,12 @@ def _interactive_select(sessions_dir: Path) -> str | None:
         return None
 
     return str(choice)
+
+
+def _slugify(text: str) -> str:
+    """Convert text to a filesystem-safe slug."""
+    text = text.lower().strip()
+    text = re.sub(r"[^\w\s-]", "", text)
+    text = re.sub(r"[\s_]+", "-", text)
+    text = re.sub(r"-+", "-", text).strip("-")
+    return text[:80] or "session"
